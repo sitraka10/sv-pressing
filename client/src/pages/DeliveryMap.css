@@ -1,0 +1,425 @@
+/* DeliveryMap.css - Version optimisée sans emojis */
+
+/* Styles Leaflet existants */
+.leaflet-tooltip.neighborhood-label {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.map-popup-content {
+  min-width: 240px;
+  max-width: 320px;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.map-popup-content h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  border-bottom: 2px solid #3b82f6;
+  padding-bottom: 6px;
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.map-popup-content ul {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 8px 0;
+}
+
+.map-popup-content li {
+  padding: 4px 0;
+  font-size: 12px;
+  color: #475569;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.map-popup-content .mt-2 {
+  margin-top: 10px;
+}
+
+.leaflet-stop-circle {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Animation pour les points survolés */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+  }
+}
+
+.leaflet-stop-circle.hovered {
+  animation: pulse 1.5s infinite;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Styles pour les badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  gap: 4px;
+}
+
+.badge-default {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.badge-secondary {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-warning {
+  background-color: #fed7aa;
+  color: #9a3412;
+}
+
+.badge-danger {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Styles pour la légende */
+.leaflet-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 14px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  backdrop-filter: blur(4px);
+  border: 1px solid #e2e8f0;
+  min-width: 160px;
+}
+
+.leaflet-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.leaflet-legend .legend-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+
+.leaflet-legend .legend-color-line {
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.leaflet-legend .legend-text {
+  font-size: 12px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.leaflet-legend .legend-count {
+  font-size: 10px;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+.leaflet-legend .legend-divider {
+  height: 1px;
+  background-color: #e2e8f0;
+  margin: 10px 0;
+}
+
+/* Styles pour les infobulles améliorées */
+.custom-tooltip, .route-tooltip {
+  background-color: white !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  padding: 8px 12px !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12px !important;
+  color: #1e293b !important;
+}
+
+.custom-tooltip::before, .route-tooltip::before {
+  border-top-color: white !important;
+}
+
+.route-tooltip strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+/* Styles pour les marqueurs */
+.custom-marker, .route-stop-marker, .driver-start-marker, .sv-pressing-marker {
+  transition: transform 0.15s ease;
+  cursor: pointer;
+}
+
+.custom-marker:hover, .route-stop-marker:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
+}
+
+/* Style pour le point de retour SV Pressing */
+.sv-pressing-marker {
+  filter: drop-shadow(0 2px 8px rgba(139, 92, 246, 0.4));
+  animation: gentlePulse 2s infinite;
+}
+
+@keyframes gentlePulse {
+  0%, 100% {
+    filter: drop-shadow(0 2px 8px rgba(139, 92, 246, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 2px 14px rgba(139, 92, 246, 0.6));
+  }
+}
+
+.sv-pressing-tooltip {
+  background-color: #8b5cf6 !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  border-radius: 20px !important;
+}
+
+/* Styles pour les lignes de route */
+.leaflet-polyline {
+  transition: stroke-width 0.2s ease;
+}
+
+/* Styles pour les cercles de quartier */
+.neighborhood-circle {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.neighborhood-circle:hover {
+  fill-opacity: 0.35 !important;
+  stroke-width: 3 !important;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .leaflet-legend {
+    bottom: 10px;
+    right: 10px;
+    padding: 8px 12px;
+    min-width: 130px;
+  }
+  
+  .leaflet-legend .legend-item {
+    margin: 5px 0;
+    gap: 6px;
+  }
+  
+  .leaflet-legend .legend-text {
+    font-size: 10px;
+  }
+  
+  .leaflet-tooltip.neighborhood-label {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+  
+  .map-popup-content {
+    min-width: 180px;
+    max-width: 260px;
+  }
+  
+  .custom-tooltip, .route-tooltip {
+    font-size: 10px !important;
+    padding: 6px 10px !important;
+  }
+}
+
+/* Mode sombre */
+@media (prefers-color-scheme: dark) {
+  .leaflet-legend {
+    background-color: rgba(30, 41, 59, 0.95);
+    border-color: #334155;
+  }
+  
+  .leaflet-legend .legend-text {
+    color: #e2e8f0;
+  }
+  
+  .leaflet-legend .legend-count {
+    color: #94a3b8;
+  }
+  
+  .leaflet-legend .legend-divider {
+    background-color: #334155;
+  }
+  
+  .map-popup-content h4 {
+    color: #f1f5f9;
+    border-bottom-color: #8b5cf6;
+  }
+  
+  .map-popup-content li {
+    color: #cbd5e1;
+    border-bottom-color: #334155;
+  }
+  
+  .custom-tooltip, .route-tooltip {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+    color: #e2e8f0 !important;
+  }
+  
+  .custom-tooltip::before, .route-tooltip::before {
+    border-top-color: #1e293b !important;
+  }
+  
+  .route-tooltip strong {
+    color: #f1f5f9;
+  }
+  
+  .badge-default {
+    background-color: #166534;
+    color: #dcfce7;
+  }
+  
+  .badge-secondary {
+    background-color: #1e40af;
+    color: #dbeafe;
+  }
+  
+  .badge-warning {
+    background-color: #9a3412;
+    color: #fed7aa;
+  }
+  
+  .badge-danger {
+    background-color: #991b1b;
+    color: #fee2e2;
+  }
+}
+
+/* Animation pour les nouveaux marqueurs */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.custom-marker, .route-stop-marker {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+/* Style pour les lignes de route avec animation */
+.route-line {
+  stroke-dasharray: 10;
+  animation: dashMove 0.5s linear infinite;
+}
+
+@keyframes dashMove {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+/* Indicateur de charge pour les livreurs dans la popup */
+.load-indicator {
+  width: 60px;
+  height: 4px;
+  background-color: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.load-indicator-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.load-indicator-fill.low {
+  background-color: #22c55e;
+}
+
+.load-indicator-fill.medium {
+  background-color: #f59e0b;
+}
+
+.load-indicator-fill.high {
+  background-color: #ef4444;
+}
+
+/* Style pour les marqueurs de priorité haute */
+.priority-high {
+  position: relative;
+}
+
+.priority-high::after {
+  content: "★";
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: #ef4444;
+  color: white;
+  font-size: 8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid white;
+  font-weight: bold;
+}
+
+/* Scrollbar personnalisée pour les popups */
+.map-popup-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.map-popup-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.map-popup-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.map-popup-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

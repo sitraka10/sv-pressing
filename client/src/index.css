@@ -1,0 +1,456 @@
+/* Google Font: Pacifico for hero accent */
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth scrolling for the entire document */
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  /* New brand palette: understated, professional */
+  --background: #FFFFFF;
+  /* overall background */
+  --foreground: #1E1E1E;
+  /* dark gray text for readability */
+  --muted: #D0EBF4;
+  /* light background for sections */
+  --muted-foreground: #5F6B6F;
+  /* subtle secondary text */
+  --popover: #FFFFFF;
+  --popover-foreground: #1E1E1E;
+  --card: #FFFFFF;
+  /* cards/surfaces */
+  --card-foreground: #1E1E1E;
+  --border: #E3E7EA;
+  /* soft borders */
+  --input: #E3E7EA;
+  /* Map tokens to roles: primary used by components for CTAs, so set to accent */
+  --primary: #389FA4;
+  /* accent for buttons/CTAs */
+  --primary-foreground: #111111;
+  /* text on accent */
+  --secondary: #EF761B;
+  /* icons, links, hover */
+  --secondary-foreground: #FFFFFF;
+  /* text on secondary if used as bg */
+  --accent: #0B676E;
+  /* brand for titles/nav/dark bg */
+  --accent-foreground: #FFFFFF;
+  --destructive: #C2413A;
+  /* calm, distinct destructive */
+  --destructive-foreground: #FFFFFF;
+  --ring: #389FA4;
+  /* focus ring uses secondary */
+  --radius: 0.75rem;
+  /* Charts tuned to palette */
+  --chart-1: #EF761B;
+  --chart-2: #389FA4;
+  --chart-3: #0B676E;
+  --chart-4: #D0EBF4;
+  --chart-5: #1E1E1E;
+  /* Sidebar / navigation */
+  --sidebar-background: #0B676E;
+  /* dark brand bg */
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #EF761B;
+  /* action in nav */
+  --sidebar-primary-foreground: #111111;
+  --sidebar-accent: #09555B;
+  /* deeper brand */
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #0A5D63;
+  --sidebar-ring: #389FA4;
+}
+
+.dark {
+  /* Dark mode tuned for contrast while matching palette */
+  --background: #0E1111;
+  --foreground: #E6E7E8;
+  --muted: #0F1719;
+  --muted-foreground: #97A3A7;
+  --popover: #0F1719;
+  --popover-foreground: #E6E7E8;
+  --card: #111A1C;
+  --card-foreground: #E6E7E8;
+  --border: #1E2A2D;
+  --input: #1E2A2D;
+  --primary: #EF761B;
+  --primary-foreground: #111111;
+  --secondary: #389FA4;
+  --secondary-foreground: #0E1111;
+  --accent: #0B676E;
+  --accent-foreground: #FFFFFF;
+  --destructive: #C2413A;
+  --destructive-foreground: #FFFFFF;
+  --ring: #389FA4;
+  --chart-1: #EF761B;
+  --chart-2: #389FA4;
+  --chart-3: #0B676E;
+  --chart-4: #2A3A3D;
+  --chart-5: #0E1111;
+  --sidebar-background: #0B676E;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #EF761B;
+  --sidebar-primary-foreground: #111111;
+  --sidebar-accent: #09555B;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #0A5D63;
+  --sidebar-ring: #389FA4;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  /* Scrollbar styles */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}
+
+@layer utilities {
+  /* Responsive visibility utilities */
+  .xs\:inline {
+    @media (min-width: 475px) {
+      display: inline;
+    }
+  }
+
+  .xs\:hidden {
+    @media (max-width: 474px) {
+      display: none;
+    }
+  }
+
+  /* Mobile menu scroll */
+  .mobile-menu-scroll {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-menu-scroll::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  .mobile-menu-scroll::-webkit-scrollbar-track {
+    @apply bg-muted rounded-full;
+  }
+
+  .mobile-menu-scroll::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  /* Custom animations for better UX */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Subtle, matte backgrounds (no glossy effects) */
+  .gradient-primary {
+    background: linear-gradient(135deg, #0B676E 0%, #09555B 100%);
+  }
+
+  .gradient-secondary {
+    background: linear-gradient(135deg, #D0EBF4 0%, #BEDFEA 100%);
+  }
+
+  /* Card hover effects */
+  .card-hover {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Button focus improvements */
+  .btn-focus {
+    transition: all 0.2s ease-in-out;
+  }
+
+  .btn-focus:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Status indicator styles */
+  .status-indicator {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-to-pickup {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .status-to-sort {
+    @apply bg-orange-100 text-orange-800;
+  }
+
+  .status-to-wash {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+
+  .status-to-dry {
+    @apply bg-blue-100 text-blue-800;
+  }
+
+  .status-to-iron {
+    @apply bg-indigo-100 text-indigo-800;
+  }
+
+  .status-ready-to-deliver {
+    @apply bg-purple-100 text-purple-800;
+  }
+
+  .status-to-deliver {
+    @apply bg-pink-100 text-pink-800;
+  }
+
+  .status-delivered {
+    @apply bg-green-100 text-green-800;
+  }
+
+  /* Form input improvements */
+  .form-input {
+    @apply w-full px-3 py-2 border border-input bg-background text-foreground placeholder:text-muted-foreground rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-colors;
+  }
+
+  /* Table styles for admin dashboard - responsive */
+  .table-responsive {
+    @apply min-w-full divide-y divide-border overflow-x-auto;
+  }
+
+  .table-header {
+    @apply bg-muted/50;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-sm;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-muted border-t-primary;
+  }
+
+  /* Professional spacing for sections */
+  .section-padding {
+    @apply py-8 sm:py-12 lg:py-16;
+  }
+
+  .container-padding {
+    @apply px-3 sm:px-4 lg:px-6 xl:px-8;
+  }
+
+  /* Enhanced focus styles for accessibility */
+  .focus-visible {
+    @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
+  }
+
+  /* Custom gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, #0B676E 0%, #389FA4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Blue-Yellow animations */
+  @keyframes glowBlueYellow {
+
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(11, 103, 110, 0.14);
+    }
+
+    50% {
+      box-shadow: 0 8px 24px -8px rgba(56, 159, 164, 0.28);
+    }
+  }
+
+  @keyframes iconPulseGy {
+
+    0%,
+    100% {
+      transform: scale(1);
+      color: #0B676E;
+    }
+
+    50% {
+      transform: scale(1.06);
+      color: #389FA4;
+    }
+  }
+
+  @keyframes gradientSheen {
+    0% {
+      transform: translateX(-100%);
+      opacity: 0.0;
+    }
+
+    20% {
+      opacity: 0.9;
+    }
+
+    50% {
+      transform: translateX(0%);
+      opacity: 0.9;
+    }
+
+    80% {
+      opacity: 0.9;
+    }
+
+    100% {
+      transform: translateX(100%);
+      opacity: 0.0;
+    }
+  }
+
+  .animate-glow-blue-yellow {
+    animation: glowBlueYellow 2.4s ease-in-out infinite;
+  }
+
+  .animate-icon-gy {
+    animation: iconPulseGy 1.8s ease-in-out infinite;
+  }
+
+  .animate-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .animate-sheen::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    width: 40%;
+    background: linear-gradient(90deg, #0B676E, #EF761B);
+    border-radius: 999px;
+    transform: translateX(-100%);
+    animation: gradientSheen 2.8s ease-in-out infinite;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-break {
+    page-break-before: always;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --border: hsl(0, 0%, 0%);
+    --primary: hsl(207, 100%, 40%);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Opt-in override: allow animations even when Reduced Motion is enabled */
+@media (prefers-reduced-motion: reduce) {
+
+  .allow-motion,
+  .allow-motion * {
+    animation-duration: initial !important;
+    animation-iteration-count: initial !important;
+    transition-duration: initial !important;
+  }
+}
+
+/* Enhance sheen visibility a bit */
+.animate-sheen::after {
+  height: 4px;
+  width: 55%;
+  opacity: 0.85;
+}
+
+/* Marquee banner utilities */
+@keyframes marqueeLeft {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-mask {
+  overflow: hidden;
+  position: relative;
+}
+
+.marquee-track {
+  display: inline-block;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marqueeLeft 16s linear infinite;
+}

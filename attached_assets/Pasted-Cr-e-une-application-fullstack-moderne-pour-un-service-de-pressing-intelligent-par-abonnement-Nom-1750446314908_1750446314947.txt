@@ -1,0 +1,79 @@
+Crée une application fullstack moderne pour un service de pressing intelligent par abonnement.  
+Nom du projet : LingeFlow (ou SV Pressing Manager)
+
+## Objectif principal :
+Gérer tout le cycle du linge (ramassage → livraison) pour des clients abonnés, avec une interface client et une interface admin.
+
+---
+
+## Fonctionnalités essentielles :
+
+### 1. Gestion du linge (workflow 48h)
+- Étapes : À ramasser → À trier (avec nombre de linges) → À laver → À sécher → À repasser → Prêt à livrer → À livrer → Livré
+- Chaque étape a un horodatage et un état.
+- Suivi intelligent du retard côté admin.
+
+### 2. Interface Client (mobile ou web) :
+- Voir l'état du linge en temps réel
+- Modifier la date de ramassage et de livraison (abonnement flexible)
+- Voir l’abonnement actuel (forfait linge / fréquence)
+- Upgrade ou downgrade l’abonnement
+- Demande d’abonnement personnalisé
+- Visualiser contrat d’abonnement intelligent généré automatiquement (PDF)
+- Télécharger facture mensuelle ou par commande
+- Recevoir des notifications (WhatsApp ou in-app)
+
+### 3. Interface Admin :
+- Suivi de toutes les commandes avec état, date, retard
+- Visualisation et modification des plannings
+- Affectation des livreurs
+- Gestion des abonnements clients
+- Historique des contrats (générés automatiquement)
+- Téléchargement de factures par client ou global
+- Suivi des dépenses internes
+- Dashboard général : commandes en cours, retards, chiffre d’affaires
+
+### 4. Livraison et planning :
+- Planification automatique ou manuelle par livreur
+- Affectation dynamique des livraisons selon planning
+- Suivi du statut des livraisons
+
+---
+
+## Modèle d’abonnement :
+- Forfait mensuel : nombre de linges inclus / semaine, fréquence (1 ou 2 ramassages), jour par défaut
+- Abonnement modifiable
+- Détection automatique des dépassements (avec facturation additionnelle)
+
+---
+
+## Gestion intelligente :
+- Contrats générés automatiquement en PDF selon le type d’abonnement
+- Relance automatique en cas de retard
+- Notifications automatiques au client
+- Suggestions de modification de planning si le client est absent
+- Dashboard analytique (retards, revenus, performance des livreurs)
+
+---
+
+## Technologies demandées :
+- Backend : Node.js avec Express ou Python avec FastAPI
+- Base de données : PostgreSQL ou MySQL (avec ORM moderne comme Drizzle ou Prisma)
+- Frontend admin : React + TailwindCSS (avec composants UI modernes type shadcn/ui)
+- App client : React Native (optionnel) ou web responsive
+- Authentification : JWT avec rôles (admin, agent, livreur, client)
+- Génération de contrats : PDFKit (ou alternative)
+- Notifications : WhatsApp API, Firebase Cloud Messaging
+- Fichiers : stockage Cloudinary ou local
+- Dashboard avec graphiques (facultatif)
+
+---
+
+Commence par la base de données et les routes API pour :
+- Utilisateurs (CRUD)
+- Abonnements (CRUD)
+- Commandes / Tâches linge (workflow)
+- Contrats PDF
+- Factures
+
+Puis, crée le frontend admin et client avec les écrans nécessaires.

@@ -1,0 +1,9 @@
+/* TEAM */
+Developer: SV Pressing Tech Team
+Site: https://svpressing.com
+Email: contact.sasavanda@gmail.com
+
+/* SITE */
+Name: SV Pressing Madagascar
+Last update: 2025-01-01
+Technologies: React, TypeScript, Node.js, PostgreSQL
