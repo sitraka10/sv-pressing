@@ -2,6 +2,11 @@
 .env
 .env.*
 !.env.example
+server/firebase-service-account.json
+*.pem
+*.key
+*.p12
+*.pfx
 dist/
 build/
 coverage/
