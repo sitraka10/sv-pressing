@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --define:process.env.NODE_ENV='\"production\"' --minify",
@@ -73,7 +76,6 @@
     "input-otp": "^1.4.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.453.0",
-    "magic-ui": "^0.1.0",
     "memorystore": "^1.6.7",
     "ml-kmeans": "^6.0.0",
     "morgan": "^1.10.1",
