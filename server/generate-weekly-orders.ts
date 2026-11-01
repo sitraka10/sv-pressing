@@ -1,835 +1,236 @@
-// FICHIER : server/generate-weekly-orders.ts
 
 import { db } from "./db";
-import { orders, users, subscriptions } from "../shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { orders, users, subscriptions, subscriptionPlans } from "../shared/schema";
+import { eq, and, inArray, gte, lt, isNull, or, lte } from "drizzle-orm";
 import { storage } from "./storage";
-
-/**
- * ============================================================
- * TYPES
- * ============================================================
- */
-
-type ClientData = {
-  id: number;
-  fullName: string;
-  preferredPickupDays: string[] | null;
-  subscriptionId: number;
-  preferredDays: string[];
-  preferredDayIndices: number[];
+ 
+/* ============================================================
+   CONSTANTES / TYPES
+============================================================ */
+const TZ_OFFSET_MS = 3 * 60 * 60 * 1000; // Madagascar = UTC+3
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PERIOD_DAYS = 3; // J+1 .. J+3
+ 
+const DAY_NAMES = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"] as const;
+ 
+// Accepte français / anglais / abréviations / accents / majuscules
+const DAY_ALIASES: Record<string, number> = {
+  dimanche: 0, dim: 0, sunday: 0, sun: 0,
+  lundi: 1, lun: 1, monday: 1, mon: 1,
+  mardi: 2, mar: 2, tuesday: 2, tue: 2, tues: 2,
+  mercredi: 3, mer: 3, wednesday: 3, wed: 3,
+  jeudi: 4, jeu: 4, thursday: 4, thu: 4, thur: 4, thurs: 4,
+  vendredi: 5, ven: 5, friday: 5, fri: 5,
+  samedi: 6, sam: 6, saturday: 6, sat: 6,
 };
-
-type OrderToInsert = {
-  clientId: number;
-  subscriptionId: number;
-  status: "to_pickup";
-  scheduledPickupDate: Date;
-  createdAt: Date;
-  updatedAt: Date;
+ 
+const normalizeDay = (value: unknown): number | null => {
+  if (typeof value !== "string") return null;
+  const key = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/\.$/, "");
+  return key in DAY_ALIASES ? DAY_ALIASES[key] : null;
 };
-
-/**
- * ============================================================
- * GENERATE TODAY ORDERS
- * ============================================================
- *
- * Génère automatiquement les commandes pour les 3 prochains jours.
- *
- * - Client actif
- * - Abonnement actif
- * - Jour de ramassage correspondant
- * - Pas de doublon
- * - Notification admin
- *
- * ============================================================
- */
-
-export async function generateTodayOrders() {
-  console.log(
-    "--- Début de la tâche de génération de commandes automatiques ---"
-  );
-
-  console.log(
-    `📅 Heure d'exécution: ${new Date().toLocaleString("fr-FR")}`
-  );
-
-  const summary = {
-    generated: 0,
-    skipped: 0,
-    ignored: 0,
-    clientsProcessed: 0,
-    daysProcessed: 0,
-    startDate: new Date(),
-    periodDays: 3,
+ 
+/** Début (00:00 heure de Madagascar) du jour J+offset, exprimé en UTC. */
+function madagascarDay(offsetDays: number) {
+  const nowMad = new Date(Date.now() + TZ_OFFSET_MS);
+  const fakeMidnight = Date.UTC(nowMad.getUTCFullYear(), nowMad.getUTCMonth(), nowMad.getUTCDate() + offsetDays);
+  const start = new Date(fakeMidnight - TZ_OFFSET_MS);
+  const end = new Date(start.getTime() + DAY_MS);
+  const dayIndex = new Date(fakeMidnight).getUTCDay();
+  return { start, end, dayIndex, label: `${DAY_NAMES[dayIndex]} ${new Date(fakeMidnight).toISOString().slice(0, 10)}` };
+}
+ 
+type GenerationSummary = {
+  generated: number;
+  skipped: number;
+  ignored: number;
+  clientsProcessed: number;
+  daysProcessed: number;
+  startDate: Date;
+  periodDays: number;
+  orderIds: number[];
+};
+ 
+// Verrou en mémoire : évite deux générations simultanées (cron + bouton + démarrage)
+let isRunning = false;
+ 
+/* ============================================================
+   GÉNÉRATION AUTOMATIQUE
+============================================================ */
+export async function generateTodayOrders(): Promise<GenerationSummary> {
+  const summary: GenerationSummary = {
+    generated: 0, skipped: 0, ignored: 0, clientsProcessed: 0,
+    daysProcessed: 0, startDate: new Date(), periodDays: PERIOD_DAYS, orderIds: [],
   };
-
+ 
+  if (isRunning) {
+    console.log("[AUTO-ORDERS] Génération déjà en cours, appel ignoré.");
+    return summary;
+  }
+  isRunning = true;
+ 
   try {
-    // ==========================================================
-    // 1. DATE DU JOUR
-    // ==========================================================
-
-    const today = new Date();
-
-    today.setHours(0, 0, 0, 0);
-
-    const dayNames: string[] = [
-      "dimanche",
-      "lundi",
-      "mardi",
-      "mercredi",
-      "jeudi",
-      "vendredi",
-      "samedi",
-    ];
-
-    // ==========================================================
-    // 2. RÉCUPÉRER LES CLIENTS ACTIFS
-    // ==========================================================
-    //
-    // IMPORTANT :
-    // On utilise INNER JOIN et non LEFT JOIN.
-    //
-    // Cela garantit que subscriptionId est un number
-    // et non number | null.
-    //
-    // ==========================================================
-
-    const activeClients = await db
+    console.log(`--- [AUTO-ORDERS] Début ${new Date().toISOString()} ---`);
+ 
+    // 1. Clients actifs + abonnement valide (le plus récent par client)
+    const horizon = madagascarDay(PERIOD_DAYS).end;
+    const rows = await db
       .select({
         id: users.id,
         fullName: users.fullName,
         preferredPickupDays: users.preferredPickupDays,
         subscriptionId: subscriptions.id,
+        subStart: subscriptions.startDate,
+        subEnd: subscriptions.endDate,
+        deliveryHours: subscriptionPlans.deliveryTimeHours,
       })
       .from(users)
-      .innerJoin(
-        subscriptions,
-        eq(users.id, subscriptions.clientId)
-      )
-      .where(
-        and(
-          eq(users.isActive, true),
-          eq(subscriptions.isActive, true)
-        )
-      );
-
-    summary.clientsProcessed = activeClients.length;
-
-    console.log(
-      `[INFO] ${summary.clientsProcessed} client(s) actif(s) avec abonnement trouvé(s).`
-    );
-
-    if (activeClients.length === 0) {
-      console.log(
-        "[INFO] Aucun client actif avec abonnement trouvé."
-      );
-
-      return summary;
+      .innerJoin(subscriptions, eq(users.id, subscriptions.clientId))
+      .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+      .where(and(
+        eq(users.isActive, true),
+        eq(users.role, "client"),
+        eq(subscriptions.isActive, true),
+        lte(subscriptions.startDate, horizon),
+      ));
+ 
+    // un seul abonnement par client : le plus récent (id le plus grand)
+    const latestByClient = new Map<number, (typeof rows)[number]>();
+    for (const r of rows) {
+      const cur = latestByClient.get(r.id);
+      if (!cur || r.subscriptionId > cur.subscriptionId) latestByClient.set(r.id, r);
     }
-
-    // ==========================================================
-    // 3. PRÉPARATION DES CLIENTS
-    // ==========================================================
-
-    const clientMap = new Map<number, ClientData>();
-
-    const allPreferredDays = new Set<string>();
-
-    for (const client of activeClients) {
-      // --------------------------------------------------------
-      // Vérifier les jours préférés
-      // --------------------------------------------------------
-
-      if (
-        !client.preferredPickupDays ||
-        client.preferredPickupDays.length === 0
-      ) {
-        console.log(
-          `[IGNORE] Client ${client.fullName} ignoré : aucun jour de ramassage défini.`
-        );
-
+    const clients = Array.from(latestByClient.values());
+    summary.clientsProcessed = clients.length;
+    console.log(`[AUTO-ORDERS] ${clients.length} client(s) actif(s) avec abonnement.`);
+ 
+    // 2. Jours préférés normalisés (index 0-6)
+    const prefs = new Map<number, Set<number>>();
+    for (const c of clients) {
+      const idx = (c.preferredPickupDays ?? [])
+        .map(normalizeDay)
+        .filter((n): n is number => n !== null);
+      if (idx.length === 0) {
+        console.log(`[AUTO-ORDERS] Ignoré : ${c.fullName} (aucun jour de ramassage valide)`);
         summary.ignored++;
-
         continue;
       }
-
-      // --------------------------------------------------------
-      // Normalisation
-      // --------------------------------------------------------
-
-      const normalizedDays: string[] =
-        client.preferredPickupDays.map(
-          (day: string) =>
-            day.toLowerCase().trim()
-        );
-
-      // --------------------------------------------------------
-      // Ajouter les jours dans le Set global
-      // --------------------------------------------------------
-
-      for (const day of normalizedDays) {
-        allPreferredDays.add(day);
-      }
-
-      // --------------------------------------------------------
-      // Transformer lundi/mardi/etc. en index
-      // --------------------------------------------------------
-
-      const preferredDayIndices: number[] =
-        normalizedDays
-          .map((day: string) =>
-            dayNames.findIndex(
-              (d: string) => d === day
-            )
-          )
-          .filter(
-            (index: number) =>
-              index !== -1
-          );
-
-      // --------------------------------------------------------
-      // Ajouter le client dans la Map
-      // --------------------------------------------------------
-
-      clientMap.set(client.id, {
-        id: client.id,
-        fullName: client.fullName,
-        preferredPickupDays:
-          client.preferredPickupDays,
-        subscriptionId:
-          client.subscriptionId,
-        preferredDays: normalizedDays,
-        preferredDayIndices,
-      });
+      prefs.set(c.id, new Set(idx));
     }
-
-    // ==========================================================
-    // Aucun client valide
-    // ==========================================================
-
-    if (clientMap.size === 0) {
-      console.log(
-        "[INFO] Aucun client avec des jours de ramassage définis."
-      );
-
-      return summary;
-    }
-
-    console.log(
-      `[INFO] ${clientMap.size} client(s) avec jours préférés définis.`
-    );
-
-    console.log(
-      `[INFO] Jours préférés détectés : ${Array.from(
-        allPreferredDays
-      ).join(", ")}`
-    );
-
-    // ==========================================================
-    // 4. PLANIFICATION DES 3 PROCHAINS JOURS
-    // ==========================================================
-
-    console.log(
-      `\n[PLANIF] Planification pour les ${summary.periodDays} prochains jours...`
-    );
-
-    for (
-      let daysOffset = 1;
-      daysOffset <= summary.periodDays;
-      daysOffset++
-    ) {
-      // --------------------------------------------------------
-      // Date du ramassage
-      // --------------------------------------------------------
-
-      const pickupDate = new Date(today);
-
-      pickupDate.setDate(
-        today.getDate() + daysOffset
-      );
-
-      pickupDate.setHours(0, 0, 0, 0);
-
-      // --------------------------------------------------------
-      // Nom du jour
-      // --------------------------------------------------------
-
-      const pickupDayIndex =
-        pickupDate.getDay();
-
-      const pickupDayName =
-        dayNames[pickupDayIndex];
-
-      // --------------------------------------------------------
-      // Vérifier si quelqu'un veut ce jour
-      // --------------------------------------------------------
-
-      if (
-        !allPreferredDays.has(
-          pickupDayName
-        )
-      ) {
-        console.log(
-          `[SKIP] ${pickupDayName} ${pickupDate.toLocaleDateString(
-            "fr-FR"
-          )} : aucun client ne souhaite de ramassage ce jour.`
-        );
-
-        continue;
-      }
-
+    if (prefs.size === 0) return summary;
+ 
+    // 3. Boucle J+1 .. J+3
+    for (let offset = 1; offset <= PERIOD_DAYS; offset++) {
+      const day = madagascarDay(offset);
+      const dueClients = clients.filter(c => prefs.get(c.id)?.has(day.dayIndex));
+      if (dueClients.length === 0) continue;
       summary.daysProcessed++;
-
-      console.log(
-        `\n[PLANIF] Traitement du ${pickupDayName} ${pickupDate.toLocaleDateString(
-          "fr-FR"
-        )} (J+${daysOffset})`
+ 
+      // Abonnement valide ce jour-là ?
+      const eligible = dueClients.filter(c =>
+        c.subStart <= day.end && (!c.subEnd || c.subEnd >= day.start)
       );
-
-      // ========================================================
-      // 5. CLIENTS POUR CE JOUR
-      // ========================================================
-
-      const clientsForThisDay: ClientData[] = [];
-
-      for (const client of clientMap.values()) {
-        if (
-          client.preferredDays.includes(
-            pickupDayName
-          )
-        ) {
-          clientsForThisDay.push(client);
-        }
-      }
-
-      if (
-        clientsForThisDay.length === 0
-      ) {
-        console.log(
-          `[INFO] Aucun client ne souhaite un ramassage le ${pickupDayName}.`
-        );
-
-        continue;
-      }
-
-      console.log(
-        `[INFO] ${clientsForThisDay.length} client(s) souhaitent un ramassage le ${pickupDayName}.`
-      );
-
-      // ========================================================
-      // 6. RÉCUPÉRER LES ID CLIENTS
-      // ========================================================
-
-      const clientIds: number[] =
-        clientsForThisDay.map(
-          (client: ClientData) =>
-            client.id
-        );
-
-      // ========================================================
-      // 7. VÉRIFIER LES COMMANDES EXISTANTES
-      // ========================================================
-
-      const existingOrders =
-        await db.query.orders.findMany({
-          where: and(
-            inArray(
-              orders.clientId,
-              clientIds
-            ),
-
-            eq(
-              orders.status,
-              "to_pickup"
-            ),
-
-            eq(
-              orders.scheduledPickupDate,
-              pickupDate
-            )
-          ),
-        });
-
-      // ========================================================
-      // Map des commandes existantes
-      // ========================================================
-
-      const existingOrderMap =
-        new Map<number, number>();
-
-      for (const order of existingOrders) {
-        existingOrderMap.set(
-          order.clientId,
-          order.id
-        );
-      }
-
-      // ========================================================
-      // 8. PRÉPARER LES COMMANDES À INSÉRER
-      // ========================================================
-      //
-      // IMPORTANT :
-      //
-      // PAS de :
-      // source: "auto"
-      //
-      // car orders.source n'existe pas dans schema.ts.
-      //
-      // ========================================================
-
-      const ordersToInsert: OrderToInsert[] =
-        [];
-
-      for (const client of clientsForThisDay) {
-        // ------------------------------------------------------
-        // Commande déjà existante ?
-        // ------------------------------------------------------
-
-        if (
-          existingOrderMap.has(
-            client.id
-          )
-        ) {
-          console.log(
-            `[SKIP] Client ${client.fullName} : commande #${existingOrderMap.get(
-              client.id
-            )} existe déjà pour ${pickupDayName}.`
-          );
-
-          summary.skipped++;
-
-          continue;
-        }
-
-        // ------------------------------------------------------
-        // Nouvelle commande
-        // ------------------------------------------------------
-
-        const newOrder: OrderToInsert = {
-          clientId: client.id,
-
-          subscriptionId:
-            client.subscriptionId,
-
-          status: "to_pickup",
-
-          scheduledPickupDate:
-            pickupDate,
-
-          createdAt: new Date(),
-
-          updatedAt: new Date(),
-        };
-
-        ordersToInsert.push(
-          newOrder
-        );
-      }
-
-      // ========================================================
-      // 9. INSERTION DES COMMANDES
-      // ========================================================
-
-      if (
-        ordersToInsert.length > 0
-      ) {
+ 
+      // Anti-doublon : TOUTE commande du client prévue ce jour-là (peu importe son statut
+      // ou son heure) compte comme déjà existante.
+      const existing = eligible.length === 0 ? [] : await db
+        .select({ id: orders.id, clientId: orders.clientId })
+        .from(orders)
+        .where(and(
+          inArray(orders.clientId, eligible.map(c => c.id)),
+          gte(orders.scheduledPickupDate, day.start),
+          lt(orders.scheduledPickupDate, day.end),
+        ));
+      const hasOrder = new Set(existing.map(o => o.clientId));
+ 
+      const toInsert = eligible
+        .filter(c => {
+          if (hasOrder.has(c.id)) { summary.skipped++; return false; }
+          return true;
+        })
+        .map(c => ({
+          clientId: c.id,
+          subscriptionId: c.subscriptionId,
+          status: "to_pickup" as const,
+          scheduledPickupDate: day.start,
+          scheduledDeliveryDate: new Date(day.start.getTime() + (c.deliveryHours || 48) * 3600 * 1000),
+        }));
+ 
+      if (toInsert.length === 0) continue;
+ 
+      try {
+        const created = await db.insert(orders).values(toInsert).returning();
+        summary.generated += created.length;
+        summary.orderIds.push(...created.map(o => o.id));
+        console.log(`[AUTO-ORDERS] ${created.length} commande(s) créée(s) pour ${day.label}`);
+ 
+        // Notification admins : ne doit jamais faire échouer la génération
         try {
-          const newOrders =
-            await db
-              .insert(orders)
-              .values(ordersToInsert)
-              .returning();
-
-          summary.generated +=
-            newOrders.length;
-
-          console.log(
-            `[SUCCESS] ${newOrders.length} commande(s) créée(s) pour ${pickupDayName}.`
-          );
-
-          // ====================================================
-          // 10. NOTIFICATIONS ADMIN
-          // ====================================================
-
-          const adminUserId = 1;
-
-          for (const order of newOrders) {
-            const client =
-              clientsForThisDay.find(
-                (client: ClientData) =>
-                  client.id ===
-                  order.clientId
-              );
-
-            // --------------------------------------------------
-            // IMPORTANT :
-            //
-            // "new_auto_order" n'existe pas dans le schema.
-            //
-            // "metadata" n'existe pas non plus.
-            //
-            // On utilise donc uniquement les propriétés
-            // réellement acceptées par createNotification.
-            // --------------------------------------------------
-
-            await storage.createNotification({
-              userId: adminUserId,
-
-              type: "order_status",
-
-              title:
-                "Commande Auto-Générée",
-
-              message:
-                `Commande #${order.id} créée pour ${
-                  client?.fullName ||
-                  "un client"
-                } (${pickupDayName} ${pickupDate.toLocaleDateString(
-                  "fr-FR"
-                )}).`,
-
-              orderId: order.id,
-            });
+          const admins = await db.select({ id: users.id }).from(users)
+            .where(and(eq(users.role, "admin"), eq(users.isActive, true)));
+          for (const order of created) {
+            const client = eligible.find(c => c.id === order.clientId);
+            for (const admin of admins) {
+              await storage.createNotification({
+                userId: admin.id,
+                type: "order_status",
+                title: "Ramassage planifié automatiquement",
+                message: `Commande #${order.id} créée pour ${client?.fullName ?? "un client"} (${day.label}).`,
+                orderId: order.id,
+              } as any);
+            }
           }
-
-          console.log(
-            `[NOTIF] ${newOrders.length} notification(s) créée(s) pour l'admin.`
-          );
-        } catch (error) {
-          console.error(
-            `[ERROR] Erreur lors de l'insertion des commandes pour ${pickupDayName}:`,
-            error
-          );
+        } catch (notifError) {
+          console.error("[AUTO-ORDERS] Notification non envoyée (commandes bien créées):", notifError);
         }
-      } else {
-        console.log(
-          `[INFO] Toutes les commandes existaient déjà pour ${pickupDayName}.`
-        );
+      } catch (error) {
+        console.error(`[AUTO-ORDERS] Erreur d'insertion pour ${day.label}:`, error);
       }
     }
+    return summary;
   } catch (error) {
-    // ==========================================================
-    // ERREUR FATALE
-    // ==========================================================
-
-    console.error(
-      "❌ ERREUR FATALE lors de la génération des commandes :",
-      error
-    );
-
+    console.error("[AUTO-ORDERS] ERREUR FATALE :", error);
     throw error;
   } finally {
-    // ==========================================================
-    // RÉSUMÉ
-    // ==========================================================
-
+    isRunning = false;
     console.log(
-      "\n" + "=".repeat(60)
-    );
-
-    console.log(
-      "--- FIN DE LA TÂCHE ---"
-    );
-
-    console.log(
-      "RÉSUMÉ :"
-    );
-
-    console.log(
-      `- Période planifiée : ${summary.periodDays} jours`
-    );
-
-    console.log(
-      `- Clients traités : ${summary.clientsProcessed}`
-    );
-
-    console.log(
-      `- Jours planifiés : ${summary.daysProcessed}`
-    );
-
-    console.log(
-      `- Commandes générées : ${summary.generated}`
-    );
-
-    console.log(
-      `- Commandes évitées (déjà existantes) : ${summary.skipped}`
-    );
-
-    console.log(
-      `- Clients ignorés (pas de jours préférés) : ${summary.ignored}`
-    );
-
-    console.log(
-      `- Durée d'exécution : ${
-        Date.now() -
-        summary.startDate.getTime()
-      }ms`
-    );
-
-    console.log(
-      "=".repeat(60) + "\n"
+      `--- [AUTO-ORDERS] Fin : ${summary.generated} créée(s), ${summary.skipped} déjà existante(s), ` +
+      `${summary.ignored} client(s) ignoré(s), ${Date.now() - summary.startDate.getTime()} ms ---`
     );
   }
-
-  return summary;
 }
-
-/**
- * ============================================================
- * TEST ORDER GENERATION
- * ============================================================
- *
- * Fonction de test.
- *
- * Cette fonction ne fait PAS d'insertion en base.
- * Elle simule seulement les commandes.
- *
- * ============================================================
- */
-
+ 
+/* ============================================================
+   SIMULATION (aucune insertion)
+============================================================ */
 export async function testOrderGeneration() {
-  console.log(
-    "🧪 TEST: Génération de commandes de test"
-  );
-
-  const today = new Date();
-
-  today.setHours(0, 0, 0, 0);
-
-  const dayNames: string[] = [
-    "dimanche",
-    "lundi",
-    "mardi",
-    "mercredi",
-    "jeudi",
-    "vendredi",
-    "samedi",
-  ];
-
-  console.log(
-    "📅 Test pour les 3 prochains jours"
-  );
-
-  // ==========================================================
-  // Récupérer un client de test
-  // ==========================================================
-
-  const testClient =
-    await db.query.users.findFirst({
-      where: and(
-        eq(
-          users.isActive,
-          true
-        ),
-
-        eq(
-          users.role,
-          "client"
-        )
-      ),
-
-      with: {
-        subscriptions: {
-          where: eq(
-            subscriptions.isActive,
-            true
-          ),
-        },
-      },
-    });
-
-  if (!testClient) {
-    console.log(
-      "⚠️ Aucun client de test trouvé"
-    );
-
-    return;
+  const client = await db.query.users.findFirst({
+    where: and(eq(users.isActive, true), eq(users.role, "client")),
+    with: { subscriptions: { where: eq(subscriptions.isActive, true) } },
+  });
+  if (!client || !client.subscriptions?.[0]) {
+    console.log("[AUTO-ORDERS][TEST] Aucun client avec abonnement actif.");
+    return [];
   }
-
-  // ==========================================================
-  // Vérifier l'abonnement
-  // ==========================================================
-
-  const testSubscription =
-    testClient.subscriptions[0];
-
-  if (!testSubscription) {
-    console.log(
-      "⚠️ Aucun abonnement actif trouvé pour le client de test"
-    );
-
-    return;
-  }
-
-  // ==========================================================
-  // Tableau des commandes de test
-  // ==========================================================
-
-  const testOrders: Array<{
-    clientId: number;
-    subscriptionId: number;
-    status: "to_pickup";
-    scheduledPickupDate: Date;
-    itemCount: number;
-    baseAmount: number;
-    createdAt: Date;
-    updatedAt: Date;
-  }> = [];
-
-  // ==========================================================
-  // Générer les 3 tests
-  // ==========================================================
-
-  for (
-    let daysOffset = 1;
-    daysOffset <= 3;
-    daysOffset++
-  ) {
-    const pickupDate =
-      new Date(today);
-
-    pickupDate.setDate(
-      today.getDate() +
-        daysOffset
-    );
-
-    pickupDate.setHours(
-      0,
-      0,
-      0,
-      0
-    );
-
-    const pickupDayName =
-      dayNames[
-        pickupDate.getDay()
-      ];
-
-    // --------------------------------------------------------
-    // Commande de test
-    // --------------------------------------------------------
-
-    const testOrder = {
-      clientId:
-        testClient.id,
-
-      subscriptionId:
-        testSubscription.id,
-
-      status:
-        "to_pickup" as const,
-
-      scheduledPickupDate:
-        pickupDate,
-
-      itemCount: 40,
-
-      baseAmount: 10000,
-
-      createdAt:
-        new Date(),
-
-      updatedAt:
-        new Date(),
-    };
-
-    testOrders.push(
-      testOrder
-    );
-
-    console.log(
-      `✅ Simulation pour ${testClient.fullName}:`
-    );
-
-    console.log(
-      `   - J+${daysOffset}: ${pickupDayName} ${pickupDate.toLocaleDateString(
-        "fr-FR"
-      )}`
-    );
-
-    console.log(
-      "   - Statut: to_pickup"
-    );
-  }
-
-  return testOrders;
+  return Array.from({ length: PERIOD_DAYS }, (_, i) => {
+    const d = madagascarDay(i + 1);
+    return { clientId: client.id, subscriptionId: client.subscriptions[0].id, status: "to_pickup" as const, scheduledPickupDate: d.start, label: d.label };
+  });
 }
-
-/**
- * ============================================================
- * RESET AUTO ORDERS
- * ============================================================
- *
- * IMPORTANT :
- *
- * Le schema actuel de orders ne possède pas :
- *
- * orders.source
- *
- * Donc on ne peut PAS faire :
- *
- * eq(orders.source, "auto")
- *
- * On utilise le statut "to_pickup".
- *
- * ============================================================
- */
-
+ 
+/* ============================================================
+   RESET — version sécurisée
+   N'efface QUE les ramassages FUTURS, encore "to_pickup", jamais collectés et
+   sans nombre de pièces saisi. Les commandes réellement traitées sont intouchables.
+============================================================ */
 export async function resetAutoOrders() {
-  console.log(
-    "🔄 Réinitialisation des commandes de ramassage"
-  );
-
-  try {
-    // ========================================================
-    // Supprimer les commandes "to_pickup"
-    // ========================================================
-
-    const result =
-      await db
-        .delete(orders)
-        .where(
-          eq(
-            orders.status,
-            "to_pickup"
-          )
-        )
-        .returning();
-
-    console.log(
-      `✅ ${result.length} commande(s) de ramassage supprimée(s).`
-    );
-
-    // ========================================================
-    // Notification admin
-    // ========================================================
-    //
-    // "system" n'existe pas dans le type notification.
-    //
-    // On utilise "order_update".
-    //
-    // ========================================================
-
-    await storage.createNotification({
-      userId: 1,
-
-      type: "order_update",
-
-      title:
-        "Commandes Auto Réinitialisées",
-
-      message:
-        `${result.length} commande(s) de ramassage ont été supprimées.`,
-    });
-
-    return result.length;
-  } catch (error) {
-    console.error(
-      "❌ Erreur lors de la réinitialisation:",
-      error
-    );
-
-    throw error;
-  }
+  const result = await db.delete(orders).where(and(
+    eq(orders.status, "to_pickup"),
+    gte(orders.scheduledPickupDate, madagascarDay(1).start),
+    isNull(orders.actualPickupDate),
+    isNull(orders.itemCount),
+  )).returning();
+  console.log(`[AUTO-ORDERS] ${result.length} ramassage(s) futur(s) vide(s) supprimé(s).`);
+  return result.length;
 }
+ 

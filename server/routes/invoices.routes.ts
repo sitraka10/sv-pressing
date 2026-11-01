@@ -1040,7 +1040,10 @@ export default function invoiceRoutes(app: Express) {
     }
   });
 
-  // GET /api/contracts/:clientId/download
+  // ============================================================
+  // ✅ GET /api/contracts/:clientId/download
+  // (MODIFIÉ : catch affiche maintenant la vraie erreur)
+  // ============================================================
   app.get("/api/contracts/:clientId/download", requireAuth, async (req: Request, res: Response) => {
     try {
       const clientId = parseInt(req.params.clientId);
@@ -1064,8 +1067,20 @@ export default function invoiceRoutes(app: Express) {
       res.setHeader("Content-Disposition", `attachment; filename="contrat_${client.fullName?.replace(/\s+/g, '_') || 'client'}.pdf"`);
       res.send(contractPdf);
     } catch (error: any) {
-      console.error("Erreur génération contrat:", error);
-      res.status(500).json({ message: "Erreur lors de la génération du contrat" });
+      // 🔍 LOG DÉTAILLÉ DANS LA CONSOLE (TERMINAL)
+      console.error("========================================");
+      console.error("❌ ERREUR GÉNÉRATION CONTRAT (route /api/contracts/:clientId/download)");
+      console.error("========================================");
+      console.error("Client ID:", req.params.clientId);
+      console.error("Message:", error?.message);
+      console.error("Stack:", error?.stack);
+      console.error("========================================");
+      
+      // 🎯 RENVOIE L'ERREUR RÉELLE AU FRONTEND
+      res.status(500).json({ 
+        message: error?.message || "Erreur lors de la génération du contrat",
+        details: process.env.NODE_ENV === "development" ? error?.stack : undefined
+      });
     }
   });
 

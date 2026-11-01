@@ -1,168 +1,369 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Area } from 'recharts';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { Clock, TrendingUp, Activity, ServerCrash, BarChart2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { useMemo } from 'react';
 
-// Fonction pour formater les données du graphique
-const formatChartData = (data: any[] | undefined) => {
-    if (!Array.isArray(data)) {
-        return [];
-    }
-    return data.map(item => ({
-        ...item,
-        // Formate "2024-07" en "Juillet 2024"
-        month: item.month ? format(new Date(`${item.month}-02`), 'MMMM yyyy', { locale: fr }) : 'Date inconnue',
-    }));
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts";
+import { format, isValid, parseISO } from "date-fns";
+import { fr } from "date-fns/locale";
+
+type GrowthItem = {
+  month: string;
+  new_clients: number | string;
 };
 
-// Fonction pour choisir la couleur du badge en fonction de l'action
-const getActionBadgeVariant = (action: string) => {
-    switch (action) {
-        case 'activated': return 'default';
-        case 'suspended': return 'destructive';
-        case 'plan_changed': return 'secondary';
-        default: return 'outline';
-    }
+type HistoryItem = {
+  id: string | number;
+  clientName?: string;
+  action: string;
+  details?: string;
+  createdAt: string;
+  adminName?: string;
+};
+
+const formatMonth = (month: string) => {
+  try {
+    const date = parseISO(`${month}-02`);
+    return isValid(date)
+      ? format(date, "MMM yy", { locale: fr })
+      : month;
+  } catch {
+    return month;
+  }
+};
+
+const formatDate = (dateValue: string) => {
+  const date = new Date(dateValue);
+  return isValid(date)
+    ? format(date, "dd/MM/yyyy HH:mm", { locale: fr })
+    : "—";
+};
+
+const actionLabel = (action: string) => {
+  const labels: Record<string, string> = {
+    activated: "Activation",
+    suspended: "Suspension",
+    plan_changed: "Modification du forfait",
+  };
+
+  return labels[action] || action.replace(/_/g, " ");
 };
 
 export function AnalyticsTab() {
-    // 1. Récupérer les données de croissance des clients
-    const { data: rawGrowthData, isLoading: isLoadingGrowth, isError: isErrorGrowth } = useQuery<any[]>({
-        queryKey: ['clientGrowth'],
-        // apiRequest returns a Response; we need to parse JSON here
-        queryFn: async () => {
-            const res = await apiRequest('GET', '/api/analytics/client-growth');
-            return await res.json();
-        },
-    });
-    const growthData = useMemo(() => formatChartData(rawGrowthData), [rawGrowthData]);
+  const growth = useQuery<GrowthItem[]>({
+    queryKey: ["clientGrowth"],
+    queryFn: async () => {
+      const response = await apiRequest(
+        "GET",
+        "/api/analytics/client-growth"
+      );
+      return response.json();
+    },
+  });
 
-    // KPIs for the summary over the chart
-    const totalNewClients = useMemo(() => (Array.isArray(rawGrowthData) ? rawGrowthData.reduce((acc, d) => acc + (Number(d?.new_clients) || 0), 0) : 0), [rawGrowthData]);
-    const avgPerMonth = useMemo(() => {
-        if (!Array.isArray(rawGrowthData) || rawGrowthData.length === 0) return 0;
-        return Math.round((totalNewClients / rawGrowthData.length) * 10) / 10;
-    }, [rawGrowthData, totalNewClients]);
+  const history = useQuery<HistoryItem[]>({
+    queryKey: ["actionsHistory"],
+    queryFn: async () => {
+      const response = await apiRequest(
+        "GET",
+        "/api/analytics/history"
+      );
+      return response.json();
+    },
+  });
 
-    // 2. Récupérer les données de l'historique des actions
-    const { data: historyData, isLoading: isLoadingHistory, isError: isErrorHistory } = useQuery<any[]>({
-        queryKey: ['actionsHistory'],
-        queryFn: async () => {
-            const res = await apiRequest('GET', '/api/analytics/history');
-            return await res.json();
-        },
-    });
+  const chartData = (growth.data ?? [])
+    .map((item) => ({
+      month: item.month,
+      label: formatMonth(item.month),
+      clients: Math.max(0, Number(item.new_clients) || 0),
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 
-    return (
-        <div className="space-y-6">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5" />
-                        Évolution des Nouveaux Clients (12 derniers mois)
-                    </CardTitle>
-                    <CardDescription>
-                        <div className="flex flex-wrap items-center gap-3 mt-1">
-                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-200">
-                                Total: {totalNewClients}
-                            </span>
-                            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">
-                                Moyenne/mois: {avgPerMonth}
-                            </span>
-                        </div>
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="h-80 pr-6">
-                    {isLoadingGrowth && <div className="flex items-center justify-center h-full text-gray-500"><Clock className="h-5 w-5 mr-2 animate-spin" />Chargement des données...</div>}
-                    {isErrorGrowth && <div className="flex flex-col items-center justify-center h-full text-red-600"><ServerCrash className="h-10 w-10 mb-2" /><p>Erreur lors du chargement des données.</p></div>}
-                    {!isLoadingGrowth && !isErrorGrowth && (
-                        growthData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={growthData} margin={{ top: 10, right: 24, left: 0, bottom: 10 }}>
-                                    <defs>
-                                        <linearGradient id="colorClients" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#16a34a" stopOpacity={0.02} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                                    <XAxis dataKey="month" tick={{ fill: '#6B7280', fontSize: 12 }} />
-                                    <YAxis allowDecimals={false} tick={{ fill: '#6B7280', fontSize: 12 }} />
-                                    <Tooltip content={({ active, payload, label }) => {
-                                        if (active && payload && payload.length) {
-                                            return (
-                                                <div className="rounded-md border border-gray-200 bg-white p-2 shadow-sm text-sm">
-                                                    <div className="font-medium text-gray-800">{label}</div>
-                                                    <div className="text-emerald-700">Nouveaux clients: <span className="font-semibold">{payload[0].value}</span></div>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    }} />
-                                    <Legend />
-                                    <ReferenceLine y={avgPerMonth} stroke="#6366F1" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Moyenne: ${avgPerMonth}`, position: 'right', fill: '#6366F1', fontSize: 11 }} />
-                                    <Area type="monotone" dataKey="new_clients" name="Nouveaux Clients" stroke="#16a34a" fillOpacity={1} fill="url(#colorClients)" />
-                                    <Line type="monotone" dataKey="new_clients" name="Nouveaux Clients" stroke="#16a34a" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 6 }} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                                <BarChart2 className="h-10 w-10 mb-2" />
-                                <p className="font-medium">Pas encore de données sur la croissance des clients.</p>
-                                <p className="text-sm text-gray-400">Approuvez de nouveaux clients pour voir cette courbe évoluer.</p>
-                            </div>
-                        )
-                    )}
-                </CardContent>
-            </Card>
+  const totalClients = chartData.reduce(
+    (sum, item) => sum + item.clients,
+    0
+  );
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Activity className="h-5 w-5" />
-                        Historique des Actions Récentes
-                    </CardTitle>
-                    <CardDescription>Les 100 dernières actions effectuées sur les comptes clients.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {isLoadingHistory && <div className="flex items-center justify-center h-full text-gray-500 py-10"><Clock className="h-5 w-5 mr-2 animate-spin" />Chargement de l'historique...</div>}
-                    {isErrorHistory && <div className="flex flex-col items-center justify-center h-full text-red-600 py-10"><ServerCrash className="h-10 w-10 mb-2" /><p>Erreur lors du chargement de l'historique.</p></div>}
-                    {!isLoadingHistory && !isErrorHistory && (
-                        (historyData && historyData.length > 0) ? (
-                            <ul className="space-y-4">
-                                {historyData.map((item: any) => (
-                                    <li key={item.id} className="flex items-start gap-4 border-b pb-3 last:border-b-0">
-                                        <div className="bg-gray-100 p-2 rounded-full mt-1">
-                                            <Clock className="h-5 w-5 text-gray-500" />
-                                        </div>
-                                        <div className="flex-grow">
-                                            <div className="flex justify-between items-center">
-                                                <p className="font-semibold">{item.clientName || 'Utilisateur inconnu'}</p>
-                                                <Badge variant={getActionBadgeVariant(item.action)}>{item.action.replace(/_/g, ' ')}</Badge>
-                                            </div>
-                                            <p className="text-sm text-gray-600">{item.details}</p>
-                                            <p className="text-xs text-gray-400 mt-1">
-                                                {format(new Date(item.createdAt), "dd MMMM yyyy 'à' HH:mm", { locale: fr })}
-                                                {item.adminName && ` par ${item.adminName}`}
-                                            </p>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                             <div className="flex flex-col items-center justify-center h-full text-gray-500 py-10">
-                                <Activity className="h-10 w-10 mb-2" />
-                                <p>Aucune action récente n'a été enregistrée.</p>
-                            </div>
-                        )
-                    )}
-                </CardContent>
-            </Card>
+  const average = chartData.length
+    ? Math.round((totalClients / chartData.length) * 10) / 10
+    : 0;
+
+  const actions = history.data ?? [];
+
+  return (
+    <main className="min-h-screen space-y-7 bg-white p-4 sm:p-6 lg:p-8">
+
+      {/* En-tête */}
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-widest text-slate-500">
+            Administration
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Analyses
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Croissance des clients et historique des opérations.
+          </p>
         </div>
-    );
+
+        <button
+          onClick={() => {
+            void growth.refetch();
+            void history.refetch();
+          }}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+        >
+          Actualiser
+        </button>
+      </header>
+
+      {/* Indicateurs */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="rounded-lg border border-slate-200 bg-white shadow-none">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-500">
+              Nouveaux clients
+            </p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+              {growth.isLoading ? "—" : totalClients.toLocaleString("fr-FR")}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Total sur la période disponible
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-lg border border-slate-200 bg-white shadow-none">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-500">
+              Moyenne mensuelle
+            </p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+              {growth.isLoading ? "—" : average.toLocaleString("fr-FR")}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Nouveaux clients par mois
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-lg border border-slate-200 bg-white shadow-none">
+          <CardContent className="p-5">
+            <p className="text-sm text-slate-500">
+              Actions récentes
+            </p>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+              {history.isLoading ? "—" : actions.length}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Opérations enregistrées dans l'historique chargé
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Graphique */}
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+          <h2 className="text-base font-semibold text-slate-900">
+            Croissance des clients
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Nombre de nouveaux clients enregistrés chaque mois.
+          </p>
+        </div>
+
+        <div className="p-4 sm:p-6">
+          {growth.isLoading ? (
+            <p className="py-24 text-center text-sm text-slate-500">
+              Chargement des données...
+            </p>
+          ) : growth.isError ? (
+            <div className="py-20 text-center">
+              <p className="text-sm text-red-600">
+                Impossible de charger les données.
+              </p>
+              <button
+                onClick={() => void growth.refetch()}
+                className="mt-3 text-sm font-medium text-teal-700 underline"
+              >
+                Réessayer
+              </button>
+            </div>
+          ) : chartData.length === 0 ? (
+            <p className="py-24 text-center text-sm text-slate-500">
+              Aucune donnée disponible pour le moment.
+            </p>
+          ) : (
+            <div className="h-[280px] w-full sm:h-[330px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={chartData}
+                  margin={{ top: 10, right: 10, bottom: 0, left: -20 }}
+                >
+                  <defs>
+                    <linearGradient
+                      id="simpleGrowthGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="#0F766E"
+                        stopOpacity={0.16}
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="#0F766E"
+                        stopOpacity={0}
+                      />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid
+                    vertical={false}
+                    stroke="#E5E7EB"
+                    strokeDasharray="3 3"
+                  />
+
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 12, fill: "#64748B" }}
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={15}
+                  />
+
+                  <YAxis
+                    allowDecimals={false}
+                    domain={[0, (max: number) => Math.max(max, 1)]}
+                    tick={{ fontSize: 12, fill: "#64748B" }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={38}
+                  />
+
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 6,
+                      border: "1px solid #E2E8F0",
+                      boxShadow: "none",
+                      fontSize: 12,
+                    }}
+                    formatter={(value) => [
+                      Number(value ?? 0),
+                      "Nouveaux clients",
+                    ]}
+                    labelStyle={{
+                      color: "#334155",
+                      marginBottom: 4,
+                    }}
+                  />
+
+                  <Area
+                    type="monotone"
+                    dataKey="clients"
+                    stroke="#0F766E"
+                    strokeWidth={2}
+                    fill="url(#simpleGrowthGradient)"
+                    activeDot={{ r: 4 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Historique */}
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-5 sm:px-6">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">
+              Historique des actions
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Liste des opérations effectuées sur les comptes clients.
+            </p>
+          </div>
+
+          <span className="text-sm text-slate-500">
+            {history.isLoading ? "Chargement..." : `${actions.length} actions`}
+          </span>
+        </div>
+
+        {history.isLoading ? (
+          <p className="py-16 text-center text-sm text-slate-500">
+            Chargement de l'historique...
+          </p>
+        ) : history.isError ? (
+          <div className="py-16 text-center">
+            <p className="text-sm text-red-600">
+              Impossible de charger l'historique.
+            </p>
+            <button
+              onClick={() => void history.refetch()}
+              className="mt-3 text-sm text-teal-700 underline"
+            >
+              Réessayer
+            </button>
+          </div>
+        ) : actions.length === 0 ? (
+          <p className="py-16 text-center text-sm text-slate-500">
+            Aucune action enregistrée.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-3">Client</th>
+                  <th className="px-5 py-3">Action</th>
+                  <th className="px-5 py-3">Détails</th>
+                  <th className="px-5 py-3">Administrateur</th>
+                  <th className="px-5 py-3">Date</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {actions.map((item) => (
+                  <tr
+                    key={item.id}
+                    className="border-t border-slate-100 transition hover:bg-slate-50"
+                  >
+                    <td className="px-5 py-4 font-medium text-slate-800">
+                      {item.clientName || "Utilisateur inconnu"}
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">
+                      {actionLabel(item.action)}
+                    </td>
+                    <td className="max-w-xs whitespace-normal px-5 py-4 text-slate-500">
+                      {item.details || "—"}
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">
+                      {item.adminName || "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-slate-500">
+                      {formatDate(item.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </main>
+  );
 }

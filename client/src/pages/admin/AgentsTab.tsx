@@ -1,75 +1,123 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+// client/src/pages/admin/AgentsTab.tsx
+// Interface Utilisateurs — flat + brand #0B676E.
+// Actions en icônes, reste textuel, sans "Vide" ni "—".
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  Plus, Edit, Eye, EyeOff, Loader2, Users, UserCheck, Shield, UserPlus,
-  Phone, Mail, Search, ChevronLeft, ChevronRight, XSquare, CheckSquare,
-  Key, Calendar, X, Check, Crown, Headphones, Settings
-} from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Eye, Pencil, Key, Power, PowerOff } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { fr } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
-// ============================================================
-// STYLES NEOMORPHIQUES
-// ============================================================
-const NEO = {
-  card: "bg-[#eef2f5] rounded-3xl shadow-[12px_12px_24px_#b8c2ca,-12px_-12px_24px_#ffffff,inset_1px_1px_1px_rgba(255,255,255,0.8),inset_-1px_-1px_1px_rgba(0,0,0,0.05)] transition-all duration-300 hover:shadow-[16px_16px_32px_#b8c2ca,-16px_-16px_32px_#ffffff] hover:-translate-y-1",
-  cardPressed: "bg-[#eef2f5] rounded-3xl shadow-[inset_4px_4px_8px_#b8c2ca,inset_-4px_-4px_8px_#ffffff]",
-  button: "bg-[#eef2f5] rounded-2xl shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] transition-all duration-300 hover:shadow-[4px_4px_8px_#b8c2ca,-4px_-4px_8px_#ffffff] hover:-translate-y-0.5 active:shadow-[inset_4px_4px_8px_#b8c2ca,inset_-4px_-4px_8px_#ffffff] active:translate-y-0.5 border-0",
-  buttonPrimary: "bg-gradient-to-br from-[#0B676E] to-[#085257] text-white shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff,inset_-2px_-2px_4px_rgba(0,0,0,0.2),inset_2px_2px_4px_rgba(255,255,255,0.3)] hover:shadow-[4px_4px_8px_#b8c2ca,-4px_-4px_8px_#ffffff] hover:-translate-y-1 active:translate-y-0.5",
-  input: "bg-[#eef2f5] rounded-2xl shadow-[inset_4px_4px_8px_#b8c2ca,inset_-4px_-4px_8px_#ffffff] border-0 focus:ring-2 focus:ring-[#0B676E] transition-all duration-300",
-  badge: "shadow-[4px_4px_8px_#b8c2ca,-2px_-2px_4px_#ffffff,inset_0_1px_1px_rgba(255,255,255,0.3)] border-0",
+/* ============================================================
+   DESIGN SYSTEM
+============================================================ */
+const ui = {
+  card: "bg-white rounded-2xl border border-slate-200/70 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.06)]",
+  input: "h-10 rounded-xl border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:border-[#0B676E] focus-visible:ring-2 focus-visible:ring-[#0B676E]/20",
+  btn: "h-9 rounded-xl border border-slate-200 bg-white font-medium text-slate-700 shadow-none transition-colors hover:bg-slate-50",
+  btnPrimary: "h-9 rounded-xl bg-[#0B676E] font-medium text-white shadow-none transition-colors hover:bg-[#09565C]",
+  dialog: "rounded-2xl border-slate-200 bg-white shadow-[0_20px_60px_-15px_rgba(15,23,42,0.25)]",
+  well: "rounded-xl border border-slate-200 bg-slate-50/80",
 };
 
-// ============================================================
-// SCHÉMAS DE VALIDATION
-// ============================================================
-const createUserSchema = z.object({
-  fullName: z.string().min(2, "Le nom complet doit contenir au moins 2 caractères"),
-  email: z.string().email("Email invalide"),
-  phone: z.string().min(10, "Numéro de téléphone invalide"),
-  username: z.string().min(3, "Nom d'utilisateur trop court"),
-  password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
-  role: z.enum(["admin", "supervisor", "agent"]),
-  isActive: z.boolean().default(true),
-});
+type Tone = "brand" | "red" | "amber" | "blue" | "slate" | "purple";
+const toneClass: Record<Tone, string> = {
+  brand: "bg-[#0B676E]/10 text-[#0B676E]",
+  red: "bg-red-50 text-red-700",
+  amber: "bg-amber-50 text-amber-700",
+  blue: "bg-blue-50 text-blue-700",
+  purple: "bg-violet-50 text-violet-700",
+  slate: "bg-slate-100 text-slate-600",
+};
 
-const editUserSchema = z.object({
-  fullName: z.string().min(2, "Le nom complet doit contenir au moins 2 caractères"),
-  email: z.string().email("Email invalide"),
-  phone: z.string().min(10, "Numéro de téléphone invalide"),
-  username: z.string().min(3, "Nom d'utilisateur trop court"),
-  password: z.string().optional(),
-  role: z.enum(["admin", "supervisor", "agent"]),
-  isActive: z.boolean().default(true),
-});
+const Pill: React.FC<{ tone?: Tone; className?: string; children: React.ReactNode }> = ({ tone = "slate", className, children }) => (
+  <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium", toneClass[tone], className)}>{children}</span>
+);
 
-// ============================================================
-// INTERFACES
-// ============================================================
-interface UserData {
+const Panel: React.FC<{
+  title: string; subtitle?: string; action?: React.ReactNode;
+  className?: string; bodyClass?: string; children: React.ReactNode;
+}> = ({ title, subtitle, action, className, bodyClass, children }) => (
+  <section className={cn(ui.card, className)}>
+    <header className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+      <div className="min-w-0">
+        <h3 className="text-[14px] font-semibold text-slate-900">{title}</h3>
+        {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+      </div>
+      {action}
+    </header>
+    <div className={cn("p-5", bodyClass)}>{children}</div>
+  </section>
+);
+
+/* Empty — sans rond "Vide" */
+const Empty: React.FC<{ title: string; hint?: string; action?: React.ReactNode }> = ({ title, hint, action }) => (
+  <div className="flex flex-col items-center justify-center py-12 text-center">
+    <p className="text-[13.5px] font-semibold text-slate-800">{title}</p>
+    {hint && <p className="mt-1 max-w-sm text-xs text-slate-500">{hint}</p>}
+    {action && <div className="mt-4">{action}</div>}
+  </div>
+);
+
+const KPI: React.FC<{ title: string; value: string | number; subtitle?: string }> = ({ title, value, subtitle }) => (
+  <div className={cn(ui.card, "p-5")}>
+    <p className="text-[12px] font-medium text-slate-500">{title}</p>
+    <p className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums">{value}</p>
+    {subtitle && <p className="mt-2 text-[11.5px] text-slate-500">{subtitle}</p>}
+  </div>
+);
+
+/* Bouton icône pour actions */
+const IconAction: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  className?: string;
+  disabled?: boolean;
+}> = ({ icon, label, onClick, className, disabled }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    title={label}
+    aria-label={label}
+    className={cn(
+      "h-7 w-7 flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+      className
+    )}
+  >
+    {icon}
+  </button>
+);
+
+/* ============================================================
+   TYPES
+============================================================ */
+type StaffRole = "admin" | "supervisor" | "agent";
+
+export interface UserData {
   id: number;
   fullName: string;
   email: string;
   phone: string;
   username: string;
-  role: 'admin' | 'supervisor' | 'agent' | 'delivery' | 'client';
+  role: StaffRole | "delivery" | "client";
   isActive: boolean;
-  status?: 'pending' | 'approved' | 'refused';
+  status?: "pending" | "approved" | "refused";
   createdAt: string;
   updatedAt?: string;
 }
@@ -78,20 +126,161 @@ interface AgentsTabProps {
   users: UserData[];
 }
 
-// ============================================================
-// COMPOSANT PRINCIPAL
-// ============================================================
+/* ============================================================
+   SCHÉMAS ZOD
+============================================================ */
+const createUserSchema = z.object({
+  fullName: z.string().min(2, "Le nom complet doit contenir au moins 2 caractères"),
+  email: z.string().email("Email invalide"),
+  phone: z.string().min(10, "Numéro de téléphone invalide"),
+  username: z.string().min(3, "Nom d'utilisateur trop court"),
+  password: z.string().min(6, "Le mot de passe doit contenir au moins 6 caractères"),
+  role: z.enum(["admin", "supervisor", "agent"]),
+  isActive: z.boolean(),
+});
+type CreateUserValues = z.infer<typeof createUserSchema>;
+
+const editUserSchema = z.object({
+  fullName: z.string().min(2, "Le nom complet doit contenir au moins 2 caractères"),
+  email: z.string().email("Email invalide"),
+  phone: z.string().min(10, "Numéro de téléphone invalide"),
+  username: z.string().min(3, "Nom d'utilisateur trop court"),
+  password: z.string().optional(),
+  role: z.enum(["admin", "supervisor", "agent"]),
+  isActive: z.boolean(),
+});
+type EditUserValues = z.infer<typeof editUserSchema>;
+
+/* ============================================================
+   HELPERS
+============================================================ */
+const getRoleConfig = (role: StaffRole) => {
+  switch (role) {
+    case "admin":
+      return { label: "Administrateur", tone: "amber" as Tone, bg: "bg-amber-500" };
+    case "supervisor":
+      return { label: "Superviseur", tone: "purple" as Tone, bg: "bg-violet-600" };
+    case "agent":
+    default:
+      return { label: "Agent", tone: "brand" as Tone, bg: "bg-[#0B676E]" };
+  }
+};
+
+const isStaffRole = (r: unknown): r is StaffRole => r === "admin" || r === "supervisor" || r === "agent";
+
+/* formatDate — vide si invalide (plus de tiret) */
+const formatDate = (d?: string) => {
+  if (!d || isNaN(new Date(d).getTime())) return "";
+  return format(new Date(d), "dd MMM yyyy", { locale: fr });
+};
+
+/* formatRelative — vide si invalide */
+const formatRelative = (d?: string) => {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "";
+  try { return formatDistanceToNow(date, { addSuffix: true, locale: fr }); }
+  catch { return ""; }
+};
+
+const initialsOf = (name?: string) =>
+  (name || "").split(" ").filter(Boolean).map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
+
+const passwordStrength = (pwd: string) => {
+  let score = 0;
+  if (pwd.length >= 6) score++;
+  if (pwd.length >= 10) score++;
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+  if (/\d/.test(pwd) && /[^A-Za-z0-9]/.test(pwd)) score++;
+  return score;
+};
+const strengthMeta = (score: number) => {
+  if (score <= 1) return { label: "Faible", color: "bg-red-500", text: "text-red-600" };
+  if (score === 2) return { label: "Moyen", color: "bg-amber-500", text: "text-amber-600" };
+  if (score === 3) return { label: "Bon", color: "bg-blue-500", text: "text-blue-600" };
+  return { label: "Fort", color: "bg-[#0B676E]", text: "text-[#0B676E]" };
+};
+
+/* ============================================================
+   PAGINATION
+============================================================ */
+const PaginationControls: React.FC<{
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  onPageChange: (p: number) => void;
+  onItemsPerPageChange: (v: number) => void;
+}> = ({ currentPage, totalPages, totalItems, itemsPerPage, onPageChange, onItemsPerPageChange }) => {
+  const start = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const end = Math.min(currentPage * itemsPerPage, totalItems);
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+      <p className="text-[11.5px] text-slate-500">
+        {start}–{end} sur <span className="font-medium text-slate-700">{totalItems}</span>
+      </p>
+      <div className="flex items-center gap-2">
+        <Select value={String(itemsPerPage)} onValueChange={(v) => onItemsPerPageChange(parseInt(v))}>
+          <SelectTrigger className={cn(ui.input, "h-8 w-[84px] text-[11.5px]")}><SelectValue /></SelectTrigger>
+          <SelectContent>{[5, 10, 25, 50].map((n) => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}</SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className={cn(ui.btn, "h-8 px-2 text-[11px]")}>
+          Préc.
+        </Button>
+        <span className="min-w-[64px] text-center text-[11.5px] text-slate-600">{currentPage} / {Math.max(totalPages, 1)}</span>
+        <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} className={cn(ui.btn, "h-8 px-2 text-[11px]")}>
+          Suiv.
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================
+   AVATAR
+============================================================ */
+const Avatar: React.FC<{ fullName: string; role: StaffRole; size?: "sm" | "lg" }> = ({ fullName, role, size = "sm" }) => {
+  const cfg = getRoleConfig(role);
+  const dim = size === "lg" ? "h-12 w-12 text-base" : "h-11 w-11 text-sm";
+  return (
+    <div className={cn("shrink-0 rounded-xl flex items-center justify-center font-semibold text-white", dim, cfg.bg)}>
+      {initialsOf(fullName)}
+    </div>
+  );
+};
+
+/* ============================================================
+   FORCE DU MOT DE PASSE
+============================================================ */
+const PasswordStrengthBar: React.FC<{ password: string }> = ({ password }) => {
+  const score = passwordStrength(password);
+  const meta = strengthMeta(score);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-1">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < score ? meta.color : "bg-slate-200")} />
+        ))}
+      </div>
+      <p className={cn("text-[11px] font-medium", meta.text)}>Force du mot de passe : {meta.label}</p>
+    </div>
+  );
+};
+
+/* ============================================================
+   COMPOSANT PRINCIPAL
+============================================================ */
 export function AgentsTab({ users }: AgentsTabProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // --- États locaux ---
+  const safeUsers = useMemo(() => Array.isArray(users) ? users : [], [users]);
+
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Dialogs states
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [editData, setEditData] = useState<UserData | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -101,66 +290,63 @@ export function AgentsTab({ users }: AgentsTabProps) {
   const [passwordTarget, setPasswordTarget] = useState<UserData | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
-  // --- Filtre des users (uniquement admin/supervisor/agent) ---
-  const staffUsers = useMemo(() => {
-    return (users || []).filter(u =>
-      u.role === 'admin' || u.role === 'supervisor' || u.role === 'agent'
-    );
-  }, [users]);
+  const staffUsers = useMemo(
+    () => safeUsers.filter((u) => isStaffRole(u.role)),
+    [safeUsers]
+  );
 
-  // --- Statistiques ---
   const stats = useMemo(() => {
-    const admins = staffUsers.filter(u => u.role === 'admin');
-    const supervisors = staffUsers.filter(u => u.role === 'supervisor');
-    const agents = staffUsers.filter(u => u.role === 'agent');
-    const active = staffUsers.filter(u => u.isActive);
-    return {
-      total: staffUsers.length,
-      admins: admins.length,
-      supervisors: supervisors.length,
-      agents: agents.length,
-      active: active.length,
-      suspended: staffUsers.length - active.length,
-    };
+    const admins = staffUsers.filter((u) => u.role === "admin").length;
+    const supervisors = staffUsers.filter((u) => u.role === "supervisor").length;
+    const agents = staffUsers.filter((u) => u.role === "agent").length;
+    const active = staffUsers.filter((u) => u.isActive).length;
+    return { total: staffUsers.length, admins, supervisors, agents, active, suspended: staffUsers.length - active };
   }, [staffUsers]);
 
-  // --- Filtrage ---
   const filteredUsers = useMemo(() => {
     let filtered = staffUsers;
-    if (activeTab === "admins") filtered = filtered.filter(u => u.role === 'admin');
-    else if (activeTab === "supervisors") filtered = filtered.filter(u => u.role === 'supervisor');
-    else if (activeTab === "agents") filtered = filtered.filter(u => u.role === 'agent');
-    else if (activeTab === "active") filtered = filtered.filter(u => u.isActive);
-    else if (activeTab === "suspended") filtered = filtered.filter(u => !u.isActive);
+    if (activeTab === "admins") filtered = filtered.filter((u) => u.role === "admin");
+    else if (activeTab === "supervisors") filtered = filtered.filter((u) => u.role === "supervisor");
+    else if (activeTab === "agents") filtered = filtered.filter((u) => u.role === "agent");
+    else if (activeTab === "active") filtered = filtered.filter((u) => u.isActive);
+    else if (activeTab === "suspended") filtered = filtered.filter((u) => !u.isActive);
 
-    if (searchTerm) {
+    if (searchTerm.trim()) {
       const s = searchTerm.toLowerCase();
-      filtered = filtered.filter(u =>
-        u.fullName?.toLowerCase().includes(s) ||
-        u.email?.toLowerCase().includes(s) ||
-        u.username?.toLowerCase().includes(s) ||
-        u.phone?.toLowerCase().includes(s)
+      filtered = filtered.filter(
+        (u) =>
+          u.fullName?.toLowerCase().includes(s) ||
+          u.email?.toLowerCase().includes(s) ||
+          u.username?.toLowerCase().includes(s) ||
+          u.phone?.toLowerCase().includes(s)
       );
     }
     return filtered;
   }, [staffUsers, activeTab, searchTerm]);
 
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const currentUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+  const currentUsers = useMemo(
+    () => filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage),
+    [filteredUsers, currentPage, itemsPerPage]
+  );
 
-  // --- Formulaires ---
-  const newUserForm = useForm<z.infer<typeof createUserSchema>>({
+  const newUserForm = useForm<CreateUserValues>({
     resolver: zodResolver(createUserSchema),
-    defaultValues: {
-      fullName: "", email: "", phone: "", username: "", password: "",
-      role: "agent", isActive: true,
-    },
+    defaultValues: { fullName: "", email: "", phone: "", username: "", password: "", role: "agent", isActive: true },
   });
 
-  const editForm = useForm<z.infer<typeof editUserSchema>>({
+  const editForm = useForm<EditUserValues>({
     resolver: zodResolver(editUserSchema),
+    defaultValues: { fullName: "", email: "", phone: "", username: "", password: "", role: "agent", isActive: true },
   });
+
+  const newFullName = useWatch({ control: newUserForm.control, name: "fullName" });
+  const newRole = useWatch({ control: newUserForm.control, name: "role" });
+  const newPasswordValue = useWatch({ control: newUserForm.control, name: "password" });
+  const editPasswordValue = useWatch({ control: editForm.control, name: "password" });
 
   useEffect(() => {
     if (editData) {
@@ -170,501 +356,368 @@ export function AgentsTab({ users }: AgentsTabProps) {
         phone: editData.phone || "",
         username: editData.username || "",
         password: "",
-        role: editData.role as "admin" | "supervisor" | "agent",
+        role: isStaffRole(editData.role) ? editData.role : "agent",
         isActive: editData.isActive ?? true,
       });
     }
   }, [editData, editForm]);
 
-  // --- Mutations ---
   const createUserMutation = useMutation({
-    mutationFn: (data: Partial<UserData> & { password: string }) =>
-      apiRequest("POST", "/api/users", data),
+    mutationFn: async (data: CreateUserValues) => (await apiRequest("POST", "/api/users", data)).json(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsNewOpen(false);
       newUserForm.reset();
-      toast({ title: "✅ Utilisateur créé", description: "Le compte a été créé avec succès."});
+      toast({ title: "Utilisateur créé" });
     },
-    onError: (error: any) => {
-      toast({ title: "❌ Échec de la création", description: error.message, variant: "destructive" });
-    },
+    onError: (error: any) => toast({ title: "Erreur", description: error?.message, variant: "destructive" }),
   });
 
   const editUserMutation = useMutation({
-    mutationFn: async (data: { id: number; data: Partial<UserData> }) => {
-      const res = await apiRequest("PATCH", `/api/users/${data.id}`, data.data);
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Échec de la modification");
-      }
-      return res.json();
-    },
+    mutationFn: async ({ id, data }: { id: number; data: Partial<UserData> & { password?: string } }) =>
+      (await apiRequest("PATCH", `/api/users/${id}`, data)).json(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsEditOpen(false);
       setEditData(null);
-      toast({ title: "✅ Utilisateur mis à jour"});
+      toast({ title: "Utilisateur mis à jour" });
     },
-    onError: (error: any) => {
-      toast({ title: "❌ Échec", description: error.message, variant: "destructive" });
-    },
+    onError: (error: any) => toast({ title: "Erreur", description: error?.message, variant: "destructive" }),
   });
 
   const changePasswordMutation = useMutation({
-    mutationFn: async ({ userId, newPassword }: { userId: number; newPassword: string }) => {
-      const res = await apiRequest("PATCH", `/api/users/${userId}/password`, { newPassword });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Échec du changement de mot de passe");
-      }
-      return res.json();
-    },
+    mutationFn: async ({ userId, newPassword }: { userId: number; newPassword: string }) =>
+      (await apiRequest("PATCH", `/api/users/${userId}/password`, { newPassword })).json(),
     onSuccess: () => {
-      toast({ title: "✅ Mot de passe modifié"});
+      toast({ title: "Mot de passe modifié" });
       setIsPasswordOpen(false);
       setPasswordTarget(null);
       setNewPassword("");
       setShowNewPassword(false);
     },
-    onError: (error: any) => {
-      toast({ title: "❌ Échec", description: error.message, variant: "destructive" });
-    },
+    onError: (error: any) => toast({ title: "Erreur", description: error?.message, variant: "destructive" }),
   });
 
   const toggleStatusMutation = useMutation({
-    mutationFn: (userId: number) =>
-      apiRequest("PATCH", `/api/users/${userId}/toggle-status`, {}),
+    mutationFn: async (userId: number) => (await apiRequest("PATCH", `/api/users/${userId}/toggle-status`, {})).json(),
     onMutate: async (userId: number) => {
       await queryClient.cancelQueries({ queryKey: ["/api/users"] });
       const prev = queryClient.getQueryData<UserData[]>(["/api/users"]);
       queryClient.setQueryData<UserData[]>(["/api/users"], (old = []) =>
-        old.map(u => u.id === userId ? { ...u, isActive: !u.isActive } : u)
+        old.map((u) => (u.id === userId ? { ...u, isActive: !u.isActive } : u))
       );
       return { prev };
     },
     onError: (_e, _id, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(["/api/users"], ctx.prev);
-      toast({ title: "❌ Échec", variant: "destructive" });
+      toast({ title: "Erreur", variant: "destructive" });
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["/api/users"] }),
   });
 
-  // --- Helpers ---
-  const getRoleConfig = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return {
-          label: 'Administrateur',
-          icon: <Crown className="h-4 w-4" />,
-          gradient: 'from-amber-500 to-orange-500',
-          bg: 'bg-amber-100',
-          text: 'text-amber-700',
-        };
-      case 'supervisor':
-        return {
-          label: 'Superviseur',
-          icon: <Settings className="h-4 w-4" />,
-          gradient: 'from-purple-500 to-indigo-500',
-          bg: 'bg-purple-100',
-          text: 'text-purple-700',
-        };
-      case 'agent':
-        return {
-          label: 'Agent',
-          icon: <Headphones className="h-4 w-4" />,
-          gradient: 'from-[#0B676E] to-teal-500',
-          bg: 'bg-teal-100',
-          text: 'text-teal-700',
-        };
-      default:
-        return { label: role, icon: <Users className="h-4 w-4" />, gradient: 'from-slate-500 to-slate-600', bg: 'bg-slate-100', text: 'text-slate-700' };
-    }
-  };
+  const openNew = useCallback(() => {
+    newUserForm.reset({ fullName: "", email: "", phone: "", username: "", password: "", role: "agent", isActive: true });
+    setShowCreatePassword(false);
+    setIsNewOpen(true);
+  }, [newUserForm]);
 
-  const formatDate = (d: string | undefined) => {
-    if (!d || isNaN(new Date(d).getTime())) return 'Non défini';
-    return format(new Date(d), "dd MMM yyyy", { locale: fr });
-  };
+  const openEdit = useCallback((user: UserData) => { setEditData(user); setShowEditPassword(false); setIsEditOpen(true); }, []);
+  const openPassword = useCallback((user: UserData) => { setPasswordTarget(user); setNewPassword(""); setShowNewPassword(false); setIsPasswordOpen(true); }, []);
+  const openDetails = useCallback((user: UserData) => { setSelectedUser(user); setIsDetailsOpen(true); }, []);
 
-  // ============================================================
-  // RENDU
-  // ============================================================
+  const handleEditSubmit = editForm.handleSubmit((data) => {
+    if (!editData) return;
+    const payload: Partial<UserData> & { password?: string } = {
+      fullName: data.fullName,
+      email: data.email,
+      phone: data.phone,
+      username: data.username,
+      role: data.role,
+      isActive: data.isActive,
+    };
+    if (data.password && data.password.trim()) payload.password = data.password;
+    editUserMutation.mutate({ id: editData.id, data: payload });
+  });
+
+  /* ============================================================
+     RENDER
+  ============================================================ */
   return (
-    <div className="space-y-6">
-      {/* ============ EN-TÊTE ============ */}
-      <div className={NEO.card}>
-        <div className="p-4 sm:p-5">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Gestion des utilisateurs</h2>
-              <p className="text-sm sm:text-base text-slate-500 mt-1">
-                Admins, superviseurs et agents de la plateforme
-              </p>
-            </div>
-            <Button
-              onClick={() => setIsNewOpen(true)}
-              className={cn(NEO.buttonPrimary, "gap-2 shadow-lg")}
-            >
-              <Plus className="h-4 w-4" />
-              Nouvel utilisateur
-            </Button>
-          </div>
+    <div className="space-y-5">
+
+      {/* HEADER */}
+      <div className={cn(ui.card, "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5")}>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Gestion des utilisateurs</h2>
+          <p className="text-xs text-slate-500 mt-1">Admins, superviseurs et agents de la plateforme</p>
         </div>
+        <Button onClick={openNew} className={cn(ui.btnPrimary)}>
+          Nouvel utilisateur
+        </Button>
       </div>
 
-      {/* ============ STATS ============ */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className={NEO.card}>
-          <div className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Total</p>
-                <p className="text-2xl font-bold text-slate-900">{stats.total}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-[#0B676E]/10 flex items-center justify-center shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                <Users className="h-5 w-5 text-[#0B676E]" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className={NEO.card}>
-          <div className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Admins</p>
-                <p className="text-2xl font-bold text-amber-600">{stats.admins}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-amber-100/40 flex items-center justify-center shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                <Crown className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className={NEO.card}>
-          <div className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Superviseurs</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.supervisors}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-purple-100/40 flex items-center justify-center shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                <Settings className="h-5 w-5 text-purple-600" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className={NEO.card}>
-          <div className="p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">Agents</p>
-                <p className="text-2xl font-bold text-teal-600">{stats.agents}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-teal-100/40 flex items-center justify-center shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                <Headphones className="h-5 w-5 text-teal-600" />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* KPI */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KPI title="Total" value={stats.total} />
+        <KPI title="Admins" value={stats.admins} />
+        <KPI title="Superviseurs" value={stats.supervisors} />
+        <KPI title="Agents" value={stats.agents} />
       </div>
 
-      {/* ============ TABS ============ */}
+      {/* TABS + LISTE */}
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentPage(1); }}>
-        <TabsList className={cn(NEO.cardPressed, "grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 p-1 rounded-2xl")}>
-          <TabsTrigger value="all" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] text-slate-600 data-[state=active]:text-slate-900 transition-all py-2">
-            <Users className="h-4 w-4 mr-2 hidden sm:inline" /> Tous ({stats.total})
-          </TabsTrigger>
-          <TabsTrigger value="admins" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] text-slate-600 data-[state=active]:text-slate-900 transition-all py-2">
-            <Crown className="h-4 w-4 mr-2 hidden sm:inline" /> Admins ({stats.admins})
-          </TabsTrigger>
-          <TabsTrigger value="supervisors" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] text-slate-600 data-[state=active]:text-slate-900 transition-all py-2">
-            <Settings className="h-4 w-4 mr-2 hidden sm:inline" /> Superviseurs ({stats.supervisors})
-          </TabsTrigger>
-          <TabsTrigger value="agents" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] text-slate-600 data-[state=active]:text-slate-900 transition-all py-2">
-            <Headphones className="h-4 w-4 mr-2 hidden sm:inline" /> Agents ({stats.agents})
-          </TabsTrigger>
-          <TabsTrigger value="active" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] text-slate-600 data-[state=active]:text-slate-900 transition-all py-2">
-            <UserCheck className="h-4 w-4 mr-2 hidden sm:inline" /> Actifs ({stats.active})
-          </TabsTrigger>
-          <TabsTrigger value="suspended" className="rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff] text-slate-600 data-[state=active]:text-slate-900 transition-all py-2">
-            <XSquare className="h-4 w-4 mr-2 hidden sm:inline" /> Suspendus ({stats.suspended})
-          </TabsTrigger>
+        <TabsList className="h-10 inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1">
+          {[
+            { v: "all", l: `Tous (${stats.total})` },
+            { v: "admins", l: `Admins (${stats.admins})` },
+            { v: "supervisors", l: `Superviseurs (${stats.supervisors})` },
+            { v: "agents", l: `Agents (${stats.agents})` },
+            { v: "active", l: `Actifs (${stats.active})` },
+            { v: "suspended", l: `Suspendus (${stats.suspended})` },
+          ].map((t) => (
+            <TabsTrigger
+              key={t.v}
+              value={t.v}
+              className="h-8 rounded-lg px-3 text-xs font-medium text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+            >
+              {t.l}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        {["all", "admins", "supervisors", "agents", "active", "suspended"].map(tab => (
-          <TabsContent key={tab} value={tab}>
-            <div className={NEO.card}>
-              {/* Filtre recherche */}
-              <div className="p-3 sm:p-4 border-b border-white/40">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="Rechercher par nom, email, username, téléphone..."
-                    className={cn(NEO.input, "pl-10 h-10")}
-                    value={searchTerm}
-                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                  />
-                </div>
-              </div>
-
-              {/* Liste */}
-              <div className="p-3 sm:p-4 space-y-4">
-                {currentUsers.length > 0 ? currentUsers.map(user => {
-                  const cfg = getRoleConfig(user.role);
+        <Panel
+          title="Liste des utilisateurs"
+          subtitle={`${filteredUsers.length} résultat(s)`}
+          className="mt-3"
+          bodyClass="p-0"
+          action={
+            <div className="relative w-full sm:w-72">
+              <Input
+                placeholder="Rechercher par nom, email, username, téléphone…"
+                className={cn(ui.input, "h-9 text-[12.5px]")}
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              />
+            </div>
+          }
+        >
+          {currentUsers.length === 0 ? (
+            <div className="p-5">
+              <Empty
+                title={searchTerm ? "Aucun résultat" : "Aucun utilisateur"}
+                hint={searchTerm ? "Essayez un autre terme de recherche" : "Créez votre premier utilisateur pour commencer."}
+                action={
+                  !searchTerm && (
+                    <Button size="sm" className={cn(ui.btnPrimary)} onClick={openNew}>
+                      Nouvel utilisateur
+                    </Button>
+                  )
+                }
+              />
+            </div>
+          ) : (
+            <>
+              <ul className="divide-y divide-slate-100">
+                {currentUsers.map((user) => {
+                  const cfg = getRoleConfig(isStaffRole(user.role) ? user.role : "agent");
                   return (
-                    <div key={user.id} className={cn(NEO.card, "hover:-translate-y-0.5 transition-all duration-300")}>
-                      <div className="p-4 sm:p-5 space-y-4">
-                        {/* Header card */}
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                          <div className="flex items-center gap-4">
-                            <div className={cn(
-                              "flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br text-white flex items-center justify-center font-bold text-lg",
-                              cfg.gradient,
-                              "shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff,inset_-2px_-2px_4px_rgba(0,0,0,0.2),inset_2px_2px_4px_rgba(255,255,255,0.3)]"
-                            )}>
-                              {user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
+                    <li key={user.id} className="p-4 transition-colors hover:bg-slate-50/60">
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <Avatar fullName={user.fullName} role={isStaffRole(user.role) ? user.role : "agent"} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-semibold text-[13.5px] text-slate-900 truncate">{user.fullName}</h4>
+                              <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                              <Pill tone={user.isActive ? "brand" : "red"}>
+                                {user.isActive ? "Actif" : "Suspendu"}
+                              </Pill>
                             </div>
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h4 className="font-bold text-xl text-slate-900">{user.fullName}</h4>
-                                <Badge className={cn("gap-1 border-0 shadow-[4px_4px_8px_#b8c2ca,-2px_-2px_4px_#ffffff]", cfg.bg, cfg.text)}>
-                                  {cfg.icon} {cfg.label}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-3 text-sm text-slate-500">
-                                <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{user.email}</span>
-                                <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{user.phone}</span>
-                              </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-slate-500">
+                              <span className="truncate">{user.email}</span>
+                              {user.phone && <span>{user.phone}</span>}
                             </div>
-                          </div>
-                          <Badge className={cn(
-                            "px-3 py-1.5 text-sm font-semibold border-0 shadow-[4px_4px_8px_#b8c2ca,-2px_-2px_4px_#ffffff]",
-                            user.isActive
-                              ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white"
-                              : "bg-gradient-to-r from-rose-500 to-pink-500 text-white"
-                          )}>
-                            {user.isActive ? '✓ Actif' : '⏸ Suspendu'}
-                          </Badge>
-                        </div>
-
-                        {/* Infos */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm border-t border-white/40 pt-4">
-                          <div className="flex items-start gap-2">
-                            <div className="p-1.5 rounded-xl bg-[#0B676E]/10 shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                              <Shield className="h-4 w-4 text-[#0B676E]" />
-                            </div>
-                            <div>
-                              <p className="text-xs text-slate-500">Username</p>
-                              <p className="text-slate-800 font-medium">{user.username}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <div className="p-1.5 rounded-xl bg-[#0B676E]/10 shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                              <Calendar className="h-4 w-4 text-[#0B676E]" />
-                            </div>
-                            <div>
-                              <p className="text-xs text-slate-500">Inscrit le</p>
-                              <p className="text-slate-800">{formatDate(user.createdAt)}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-start gap-2">
-                            <div className="p-1.5 rounded-xl bg-[#0B676E]/10 shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                              <UserCheck className="h-4 w-4 text-[#0B676E]" />
-                            </div>
-                            <div>
-                              <p className="text-xs text-slate-500">Dernière activité</p>
-                              <p className="text-slate-800">
-                                {user.updatedAt
-                                  ? formatDistanceToNow(new Date(user.updatedAt), { addSuffix: true, locale: fr })
-                                  : 'Jamais'}
-                              </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                              <span>{user.username}</span>
+                              {formatDate(user.createdAt) && <span>Créé le {formatDate(user.createdAt)}</span>}
+                              {formatRelative(user.updatedAt) && <span>Mis à jour {formatRelative(user.updatedAt)}</span>}
                             </div>
                           </div>
                         </div>
 
-                        {/* Actions */}
-                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/40 pt-4">
-                          <Button
-                            variant="ghost" size="sm"
-                            onClick={() => { setSelectedUser(user); setIsDetailsOpen(true); }}
-                            className={cn(NEO.button, "text-[#0B676E] hover:text-[#0B676E]")}
-                          >
-                            <Eye className="h-4 w-4 mr-1" /> Détails
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            onClick={() => { setEditData(user); setIsEditOpen(true); }}
-                            className={cn(NEO.button, "text-purple-600 hover:text-purple-700")}
-                          >
-                            <Edit className="h-4 w-4 mr-1" /> Modifier
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            onClick={() => { setPasswordTarget(user); setNewPassword(""); setShowNewPassword(false); setIsPasswordOpen(true); }}
-                            className={cn(NEO.button, "text-amber-600 hover:text-amber-700")}
-                          >
-                            <Key className="h-4 w-4 mr-1" /> Mot de passe
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm"
-                            className={cn(
-                              NEO.button,
-                              user.isActive ? "text-red-600 hover:text-red-700" : "text-emerald-600 hover:text-emerald-700"
-                            )}
+                        {/* Actions icônes */}
+                        <div className="flex items-center gap-1 shrink-0 lg:justify-end">
+                          <IconAction
+                            icon={<Eye className="h-3.5 w-3.5" />}
+                            label="Détails"
+                            onClick={() => openDetails(user)}
+                            className="text-slate-700"
+                          />
+                          <IconAction
+                            icon={<Pencil className="h-3.5 w-3.5" />}
+                            label="Modifier"
+                            onClick={() => openEdit(user)}
+                            className="text-violet-600 border-violet-200"
+                          />
+                          <IconAction
+                            icon={<Key className="h-3.5 w-3.5" />}
+                            label="Changer le mot de passe"
+                            onClick={() => openPassword(user)}
+                            className="text-amber-600 border-amber-200"
+                          />
+                          <IconAction
+                            icon={user.isActive ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                            label={user.isActive ? "Suspendre" : "Activer"}
                             onClick={() => toggleStatusMutation.mutate(user.id)}
                             disabled={toggleStatusMutation.isPending}
-                          >
-                            {toggleStatusMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : user.isActive ? (
-                              <XSquare className="h-4 w-4 mr-1" />
-                            ) : (
-                              <CheckSquare className="h-4 w-4 mr-1" />
-                            )}
-                            {user.isActive ? "Suspendre" : "Activer"}
-                          </Button>
+                            className={user.isActive ? "text-red-600 border-red-200" : "text-[#0B676E] border-[#0B676E]/30"}
+                          />
                         </div>
                       </div>
-                    </div>
+                    </li>
                   );
-                }) : (
-                  <div className="text-center py-12 text-slate-500 bg-[#eef2f5] rounded-3xl shadow-[inset_4px_4px_8px_#b8c2ca,inset_-4px_-4px_8px_#ffffff]">
-                    <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                    <p className="text-lg font-medium text-slate-700 mb-2">Aucun utilisateur trouvé</p>
-                    <p className="text-slate-500">Ajustez vos critères ou créez un nouvel utilisateur.</p>
-                  </div>
-                )}
-              </div>
+                })}
+              </ul>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/40 px-3 sm:px-4 pb-3 sm:pb-4">
-                  <div className="text-sm text-slate-500">
-                    Affichage {Math.min((currentPage - 1) * itemsPerPage + 1, filteredUsers.length)}-{Math.min(currentPage * itemsPerPage, filteredUsers.length)} sur {filteredUsers.length}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Label className="text-sm text-slate-700">Afficher:</Label>
-                    <Select value={itemsPerPage.toString()} onValueChange={(v) => { setItemsPerPage(Number(v)); setCurrentPage(1); }}>
-                      <SelectTrigger className={cn(NEO.input, "w-[80px] h-9")}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#eef2f5] rounded-2xl border-0">
-                        <SelectItem value="5">5</SelectItem>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} className={NEO.button}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum;
-                        if (totalPages <= 5) pageNum = i + 1;
-                        else if (currentPage <= 3) pageNum = i + 1;
-                        else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                        else pageNum = currentPage - 2 + i;
-                        return (
-                          <Button
-                            key={pageNum}
-                            variant={currentPage === pageNum ? "default" : "outline"}
-                            size="sm"
-                            className={cn("h-8 w-8 p-0", currentPage === pageNum ? NEO.buttonPrimary : NEO.button)}
-                            onClick={() => setCurrentPage(pageNum)}
-                          >
-                            {pageNum}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages} className={NEO.button}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
+              {filteredUsers.length > 0 && (
+                <div className="border-t border-slate-100 px-5 py-3">
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={filteredUsers.length}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={(v) => { setItemsPerPage(v); setCurrentPage(1); }}
+                  />
                 </div>
               )}
-            </div>
-          </TabsContent>
-        ))}
+            </>
+          )}
+        </Panel>
       </Tabs>
 
       {/* ============ DIALOG NOUVEAU ============ */}
       <Dialog open={isNewOpen} onOpenChange={setIsNewOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-6 bg-[#eef2f5] rounded-3xl shadow-[24px_24px_48px_#b8c2ca,-24px_-24px_48px_#ffffff] border-0">
-          <DialogHeader className="pb-4 border-b border-white/40">
-            <DialogTitle className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <UserPlus className="h-6 w-6 text-[#0B676E]" />
-              Créer un nouvel utilisateur
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 mt-1">
-              Créez un compte admin, superviseur ou agent
-            </DialogDescription>
+        <DialogContent className={cn(ui.dialog, "sm:max-w-[640px] max-h-[92vh] overflow-y-auto")}>
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Créer un nouvel utilisateur</DialogTitle>
+            <DialogDescription className="text-xs">Remplissez les informations ci-dessous pour créer un compte staff.</DialogDescription>
           </DialogHeader>
+
           <Form {...newUserForm}>
-            <form onSubmit={newUserForm.handleSubmit((data) => createUserMutation.mutate(data as any))} className="space-y-4 py-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField control={newUserForm.control} name="fullName" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-700">Nom complet *</FormLabel>
-                    <FormControl><Input placeholder="Jean Rakoto" className={NEO.input} {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={newUserForm.control} name="email" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-700">Email *</FormLabel>
-                    <FormControl><Input type="email" placeholder="jean@svpressing.mg" className={NEO.input} {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={newUserForm.control} name="phone" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-700">Téléphone *</FormLabel>
-                    <FormControl><Input placeholder="+261 34 00 000 00" className={NEO.input} {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={newUserForm.control} name="username" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-700">Nom d'utilisateur *</FormLabel>
-                    <FormControl><Input placeholder="jean.rakoto" className={NEO.input} {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={newUserForm.control} name="password" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-700">Mot de passe *</FormLabel>
-                    <FormControl><Input type="password" placeholder="••••••••" className={NEO.input} {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={newUserForm.control} name="role" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-slate-700">Rôle *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+            <form onSubmit={newUserForm.handleSubmit((data) => createUserMutation.mutate(data))} className="space-y-5">
+              {/* Aperçu avatar */}
+              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <Avatar fullName={newFullName || ""} role={newRole as StaffRole} size="lg" />
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-slate-900 truncate">{newFullName || "Nom complet"}</p>
+                  <div className="mt-0.5">
+                    <Pill tone={getRoleConfig(newRole as StaffRole).tone}>{getRoleConfig(newRole as StaffRole).label}</Pill>
+                  </div>
+                </div>
+              </div>
+
+              {/* Identité */}
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Identité</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={newUserForm.control} name="fullName" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Nom complet *</FormLabel>
+                      <FormControl><Input placeholder="Jean Rakoto" className={ui.input} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={newUserForm.control} name="role" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Rôle *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger className={ui.input}><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="admin">Administrateur</SelectItem>
+                          <SelectItem value="supervisor">Superviseur</SelectItem>
+                          <SelectItem value="agent">Agent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+
+              {/* Contact */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Contact</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={newUserForm.control} name="email" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Email *</FormLabel>
+                      <FormControl><Input type="email" placeholder="jean@svpressing.mg" className={ui.input} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={newUserForm.control} name="phone" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Téléphone *</FormLabel>
+                      <FormControl><Input placeholder="+261 34 00 000 00" className={ui.input} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+
+              {/* Sécurité */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sécurité</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={newUserForm.control} name="username" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Nom d'utilisateur *</FormLabel>
+                      <FormControl><Input placeholder="jean.rakoto" className={ui.input} {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={newUserForm.control} name="password" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Mot de passe *</FormLabel>
                       <FormControl>
-                        <SelectTrigger className={NEO.input}>
-                          <SelectValue placeholder="Sélectionner un rôle" />
-                        </SelectTrigger>
+                        <div className="relative">
+                          <Input type={showCreatePassword ? "text" : "password"} placeholder="••••••••" className={cn(ui.input, "pr-11")} {...field} />
+                          <button
+                            type="button"
+                            onClick={() => setShowCreatePassword((p) => !p)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10.5px] text-slate-500 hover:text-slate-800"
+                          >
+                            {showCreatePassword ? "Cacher" : "Voir"}
+                          </button>
+                        </div>
                       </FormControl>
-                      <SelectContent className="bg-[#eef2f5] rounded-2xl border-0">
-                        <SelectItem value="admin">👑 Administrateur</SelectItem>
-                        <SelectItem value="supervisor">⚙️ Superviseur</SelectItem>
-                        <SelectItem value="agent">🎧 Agent</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+                {newPasswordValue && newPasswordValue.length > 0 && <PasswordStrengthBar password={newPasswordValue} />}
+              </div>
+
+              {/* Statut */}
+              <div className="pt-2 border-t border-slate-100">
+                <FormField control={newUserForm.control} name="isActive" render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                    <FormControl>
+                      <input type="checkbox" checked={field.value} onChange={(e) => field.onChange(e.target.checked)} className="h-4 w-4 accent-[#0B676E] mt-0.5" />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="text-xs font-medium text-slate-800">Compte actif dès la création</FormLabel>
+                      <p className="text-[11px] text-slate-500">L'utilisateur pourra se connecter immédiatement.</p>
+                    </div>
                   </FormItem>
                 )} />
               </div>
-              <DialogFooter className="pt-4 border-t border-white/40">
-                <Button type="button" variant="outline" onClick={() => setIsNewOpen(false)} className={NEO.button}>Annuler</Button>
-                <Button type="submit" disabled={createUserMutation.isPending} className={NEO.buttonPrimary}>
-                  {createUserMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Création...</>) : (<><UserPlus className="h-4 w-4 mr-2" />Créer le compte</>)}
+
+              <DialogFooter>
+                <Button type="button" variant="outline" className={ui.btn} onClick={() => setIsNewOpen(false)}>Annuler</Button>
+                <Button type="submit" disabled={createUserMutation.isPending} className={cn(ui.btnPrimary)}>
+                  {createUserMutation.isPending ? "Création…" : "Créer le compte"}
                 </Button>
               </DialogFooter>
             </form>
@@ -673,99 +726,114 @@ export function AgentsTab({ users }: AgentsTabProps) {
       </Dialog>
 
       {/* ============ DIALOG MODIFIER ============ */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-6 bg-[#eef2f5] rounded-3xl shadow-[24px_24px_48px_#b8c2ca,-24px_-24px_48px_#ffffff] border-0">
-          <DialogHeader className="pb-4 border-b border-white/40">
-            <DialogTitle className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <Edit className="h-6 w-6 text-purple-600" />
-              Modifier #{editData?.id}
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 mt-1">
-              Modifiez les informations de l'utilisateur
-            </DialogDescription>
+      <Dialog open={isEditOpen} onOpenChange={(o) => { setIsEditOpen(o); if (!o) setEditData(null); }}>
+        <DialogContent className={cn(ui.dialog, "sm:max-w-[640px] max-h-[92vh] overflow-y-auto")}>
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Modifier #{editData?.id}</DialogTitle>
+            <DialogDescription className="text-xs">Modifiez les informations de l'utilisateur.</DialogDescription>
           </DialogHeader>
           {editData && (
             <Form {...editForm}>
-              <form onSubmit={editForm.handleSubmit((data) => {
-                const apiData: any = {
-                  fullName: data.fullName,
-                  email: data.email,
-                  phone: data.phone,
-                  username: data.username,
-                  role: data.role,
-                  isActive: data.isActive,
-                };
-                if (data.password && data.password.trim()) apiData.password = data.password;
-                editUserMutation.mutate({ id: editData.id, data: apiData });
-              })} className="space-y-4 py-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField control={editForm.control} name="fullName" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Nom complet *</FormLabel>
-                      <FormControl><Input className={NEO.input} {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="email" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Email *</FormLabel>
-                      <FormControl><Input type="email" className={NEO.input} {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="phone" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Téléphone *</FormLabel>
-                      <FormControl><Input className={NEO.input} {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="username" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Username *</FormLabel>
-                      <FormControl><Input className={NEO.input} {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="password" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Nouveau mot de passe (vide = inchangé)</FormLabel>
-                      <FormControl><Input type="password" placeholder="••••••••" className={NEO.input} {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={editForm.control} name="role" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-slate-700">Rôle *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+              <form onSubmit={handleEditSubmit} className="space-y-5">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                  <Avatar fullName={editData.fullName} role={isStaffRole(editData.role) ? editData.role : "agent"} size="lg" />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-slate-900 truncate">{editData.fullName}</p>
+                    <div className="mt-0.5">
+                      <Pill tone={getRoleConfig(isStaffRole(editData.role) ? editData.role : "agent").tone}>
+                        {getRoleConfig(isStaffRole(editData.role) ? editData.role : "agent").label}
+                      </Pill>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Identité */}
+                <div className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Identité</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={editForm.control} name="fullName" render={({ field }) => (
+                      <FormItem><FormLabel className="text-xs">Nom complet *</FormLabel><FormControl><Input className={ui.input} {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={editForm.control} name="role" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">Rôle *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger className={ui.input}><SelectValue /></SelectTrigger></FormControl>
+                          <SelectContent>
+                            <SelectItem value="admin">Administrateur</SelectItem>
+                            <SelectItem value="supervisor">Superviseur</SelectItem>
+                            <SelectItem value="agent">Agent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+
+                {/* Contact */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Contact</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={editForm.control} name="email" render={({ field }) => (
+                      <FormItem><FormLabel className="text-xs">Email *</FormLabel><FormControl><Input type="email" className={ui.input} {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={editForm.control} name="phone" render={({ field }) => (
+                      <FormItem><FormLabel className="text-xs">Téléphone *</FormLabel><FormControl><Input className={ui.input} {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                  </div>
+                </div>
+
+                {/* Sécurité */}
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sécurité</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField control={editForm.control} name="username" render={({ field }) => (
+                      <FormItem><FormLabel className="text-xs">Username *</FormLabel><FormControl><Input className={ui.input} {...field} /></FormControl><FormMessage /></FormItem>
+                    )} />
+                    <FormField control={editForm.control} name="password" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs">
+                          Nouveau mot de passe <span className="text-[10px] font-normal text-slate-400">(vide = inchangé)</span>
+                        </FormLabel>
                         <FormControl>
-                          <SelectTrigger className={NEO.input}><SelectValue /></SelectTrigger>
+                          <div className="relative">
+                            <Input type={showEditPassword ? "text" : "password"} placeholder="••••••••" className={cn(ui.input, "pr-11")} {...field} />
+                            <button
+                              type="button"
+                              onClick={() => setShowEditPassword((p) => !p)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-[10.5px] text-slate-500 hover:text-slate-800"
+                            >
+                              {showEditPassword ? "Cacher" : "Voir"}
+                            </button>
+                          </div>
                         </FormControl>
-                        <SelectContent className="bg-[#eef2f5] rounded-2xl border-0">
-                          <SelectItem value="admin">👑 Administrateur</SelectItem>
-                          <SelectItem value="supervisor">⚙️ Superviseur</SelectItem>
-                          <SelectItem value="agent">🎧 Agent</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                  {editPasswordValue && editPasswordValue.length > 0 && <PasswordStrengthBar password={editPasswordValue} />}
+                </div>
+
+                {/* Statut */}
+                <div className="pt-2 border-t border-slate-100">
+                  <FormField control={editForm.control} name="isActive" render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <FormControl>
+                        <input type="checkbox" checked={field.value} onChange={(e) => field.onChange(e.target.checked)} className="h-4 w-4 accent-[#0B676E] mt-0.5" />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="text-xs font-medium text-slate-800">Compte actif</FormLabel>
+                        <p className="text-[11px] text-slate-500">L'utilisateur peut se connecter à la plateforme.</p>
+                      </div>
                     </FormItem>
                   )} />
                 </div>
-                <FormField control={editForm.control} name="isActive" render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-2xl border border-white/40 p-4 shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                    <FormControl>
-                      <input type="checkbox" checked={field.value} onChange={field.onChange} className="h-4 w-4 accent-[#0B676E]" />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="text-slate-700">Compte actif</FormLabel>
-                      <p className="text-sm text-slate-500">L'utilisateur peut se connecter à la plateforme</p>
-                    </div>
-                  </FormItem>
-                )} />
-                <DialogFooter className="pt-4 border-t border-white/40">
-                  <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)} className={NEO.button}>Annuler</Button>
-                  <Button type="submit" disabled={editUserMutation.isPending} className={NEO.buttonPrimary}>
-                    {editUserMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sauvegarde...</>) : (<><Check className="h-4 w-4 mr-2" />Enregistrer</>)}
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" className={ui.btn} onClick={() => setIsEditOpen(false)}>Annuler</Button>
+                  <Button type="submit" disabled={editUserMutation.isPending} className={cn(ui.btnPrimary)}>
+                    {editUserMutation.isPending ? "Sauvegarde…" : "Enregistrer"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -775,64 +843,43 @@ export function AgentsTab({ users }: AgentsTabProps) {
       </Dialog>
 
       {/* ============ DIALOG DÉTAILS ============ */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="sm:max-w-[600px] p-6 bg-[#eef2f5] rounded-3xl shadow-[24px_24px_48px_#b8c2ca,-24px_-24px_48px_#ffffff] border-0">
+      <Dialog open={isDetailsOpen} onOpenChange={(o) => { setIsDetailsOpen(o); if (!o) setSelectedUser(null); }}>
+        <DialogContent className={cn(ui.dialog, "sm:max-w-[600px]")}>
           {selectedUser && (() => {
-            const cfg = getRoleConfig(selectedUser.role);
+            const cfg = getRoleConfig(isStaffRole(selectedUser.role) ? selectedUser.role : "agent");
             return (
               <>
-                <DialogHeader className="pb-4 border-b border-white/40">
+                <DialogHeader>
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "h-14 w-14 rounded-xl bg-gradient-to-br text-white flex items-center justify-center font-bold text-xl",
-                      cfg.gradient,
-                      "shadow-[8px_8px_16px_#b8c2ca,-8px_-8px_16px_#ffffff,inset_-2px_-2px_4px_rgba(0,0,0,0.2),inset_2px_2px_4px_rgba(255,255,255,0.3)]"
-                    )}>
-                      {selectedUser.fullName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)}
-                    </div>
-                    <div>
-                      <DialogTitle className="text-2xl font-bold text-slate-900">{selectedUser.fullName}</DialogTitle>
-                      <DialogDescription className="text-slate-500 mt-1 flex items-center gap-2">
-                        <Badge className={cn("gap-1 border-0", cfg.bg, cfg.text)}>{cfg.icon} {cfg.label}</Badge>
-                        <Badge className={selectedUser.isActive ? "bg-emerald-100 text-emerald-700 border-0" : "bg-rose-100 text-rose-700 border-0"}>
-                          {selectedUser.isActive ? '✓ Actif' : '⏸ Suspendu'}
-                        </Badge>
+                    <Avatar fullName={selectedUser.fullName} role={isStaffRole(selectedUser.role) ? selectedUser.role : "agent"} size="lg" />
+                    <div className="min-w-0">
+                      <DialogTitle className="text-base font-semibold truncate">{selectedUser.fullName}</DialogTitle>
+                      <DialogDescription className="text-xs mt-1 flex flex-wrap items-center gap-2">
+                        <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                        <Pill tone={selectedUser.isActive ? "brand" : "red"}>{selectedUser.isActive ? "Actif" : "Suspendu"}</Pill>
                       </DialogDescription>
                     </div>
                   </div>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="p-3 rounded-2xl bg-[#eef2f5] shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                      <p className="text-xs text-slate-500">Email</p>
-                      <p className="text-slate-900 font-medium">{selectedUser.email}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+                  {[
+                    ["Email", selectedUser.email],
+                    ["Téléphone", selectedUser.phone],
+                    ["Username", selectedUser.username],
+                    ["ID", `#${selectedUser.id}`],
+                    ["Créé le", formatDate(selectedUser.createdAt)],
+                    ["Mis à jour", formatDate(selectedUser.updatedAt)],
+                  ].map(([k, v]) => (
+                    <div key={k as string} className={cn(ui.well, "p-3")}>
+                      <p className="text-[10.5px] uppercase tracking-wide text-slate-500">{k}</p>
+                      <p className="text-[13px] font-medium text-slate-900 mt-0.5 break-all">{v || ""}</p>
                     </div>
-                    <div className="p-3 rounded-2xl bg-[#eef2f5] shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                      <p className="text-xs text-slate-500">Téléphone</p>
-                      <p className="text-slate-900 font-medium">{selectedUser.phone}</p>
-                    </div>
-                    <div className="p-3 rounded-2xl bg-[#eef2f5] shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                      <p className="text-xs text-slate-500">Username</p>
-                      <p className="text-slate-900 font-medium">{selectedUser.username}</p>
-                    </div>
-                    <div className="p-3 rounded-2xl bg-[#eef2f5] shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                      <p className="text-xs text-slate-500">ID</p>
-                      <p className="text-slate-900 font-medium">#{selectedUser.id}</p>
-                    </div>
-                    <div className="p-3 rounded-2xl bg-[#eef2f5] shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                      <p className="text-xs text-slate-500">Créé le</p>
-                      <p className="text-slate-900 font-medium">{formatDate(selectedUser.createdAt)}</p>
-                    </div>
-                    <div className="p-3 rounded-2xl bg-[#eef2f5] shadow-[inset_2px_2px_4px_#b8c2ca,inset_-2px_-2px_4px_#ffffff]">
-                      <p className="text-xs text-slate-500">Mis à jour</p>
-                      <p className="text-slate-900 font-medium">{formatDate(selectedUser.updatedAt)}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsDetailsOpen(false)} className={NEO.button}>Fermer</Button>
-                  <Button onClick={() => { setIsDetailsOpen(false); setEditData(selectedUser); setIsEditOpen(true); }} className={NEO.buttonPrimary}>
-                    <Edit className="h-4 w-4 mr-2" /> Modifier
+                  <Button variant="outline" className={ui.btn} onClick={() => setIsDetailsOpen(false)}>Fermer</Button>
+                  <Button className={cn(ui.btnPrimary)} onClick={() => { setIsDetailsOpen(false); setEditData(selectedUser); setIsEditOpen(true); }}>
+                    Modifier
                   </Button>
                 </DialogFooter>
               </>
@@ -842,52 +889,47 @@ export function AgentsTab({ users }: AgentsTabProps) {
       </Dialog>
 
       {/* ============ DIALOG MOT DE PASSE ============ */}
-      <Dialog open={isPasswordOpen} onOpenChange={setIsPasswordOpen}>
-        <DialogContent className="sm:max-w-[450px] p-6 bg-[#eef2f5] rounded-3xl shadow-[24px_24px_48px_#b8c2ca,-24px_-24px_48px_#ffffff] border-0">
-          <DialogHeader className="pb-4 border-b border-white/40">
-            <DialogTitle className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <Key className="h-5 w-5 text-amber-600" />
-              Changer le mot de passe
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 mt-1">
+      <Dialog open={isPasswordOpen} onOpenChange={(o) => { setIsPasswordOpen(o); if (!o) { setPasswordTarget(null); setNewPassword(""); setShowNewPassword(false); } }}>
+        <DialogContent className={cn(ui.dialog, "sm:max-w-[460px]")}>
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Changer le mot de passe</DialogTitle>
+            <DialogDescription className="text-xs">
               Pour : <span className="font-semibold text-slate-700">{passwordTarget?.fullName}</span>
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-3 py-1">
             <div>
-              <Label className="text-slate-700">Nouveau mot de passe *</Label>
+              <Label className="text-xs">Nouveau mot de passe *</Label>
               <div className="relative mt-2">
                 <Input
                   type={showNewPassword ? "text" : "password"}
                   placeholder="Minimum 6 caractères"
-                  className={cn(NEO.input, "pr-11")}
+                  className={cn(ui.input, "pr-11")}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowNewPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 transition-colors"
-                  aria-label={showNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
-                  title={showNewPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  onClick={() => setShowNewPassword((p) => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[10.5px] text-slate-500 hover:text-slate-800"
                 >
-                  {showNewPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showNewPassword ? "Cacher" : "Voir"}
                 </button>
               </div>
             </div>
+            {newPassword.length > 0 && <PasswordStrengthBar password={newPassword} />}
+            {newPassword.length > 0 && newPassword.length < 6 && (
+              <p className="text-[11px] text-red-600">Minimum 6 caractères requis</p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPasswordOpen(false)} className={NEO.button}>Annuler</Button>
+            <Button variant="outline" className={ui.btn} onClick={() => setIsPasswordOpen(false)}>Annuler</Button>
             <Button
               onClick={() => passwordTarget && changePasswordMutation.mutate({ userId: passwordTarget.id, newPassword })}
               disabled={!newPassword || newPassword.length < 6 || changePasswordMutation.isPending}
-              className={NEO.buttonPrimary}
+              className={cn(ui.btnPrimary)}
             >
-              {changePasswordMutation.isPending ? (<><Loader2 className="h-4 w-4 mr-2 animate-spin" />Modification...</>) : (<><Key className="h-4 w-4 mr-2" />Modifier</>)}
+              {changePasswordMutation.isPending ? "Modification…" : "Modifier"}
             </Button>
           </DialogFooter>
         </DialogContent>
