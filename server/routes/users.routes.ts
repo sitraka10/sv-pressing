@@ -84,7 +84,7 @@ export default function userRoutes(app: Express) {
       
       // Vérifier les permissions
       const currentUser = (req as any).user;
-      if (currentUser.role === "client" && currentUser.id !== userId) {
+      if (currentUser.role !== "admin" && currentUser.role !== "supervisor" && currentUser.id !== userId) {
         return res.status(403).json({ message: "Permission refusée" });
       }
       
@@ -115,7 +115,7 @@ export default function userRoutes(app: Express) {
       
       // Vérifier les permissions
       const currentUser = (req as any).user;
-      if (currentUser.role === "client" && currentUser.id !== userId) {
+      if (currentUser.role !== "admin" && currentUser.role !== "supervisor" && currentUser.id !== userId) {
         return res.status(403).json({ message: "Permission refusée" });
       }
       
@@ -154,6 +154,18 @@ export default function userRoutes(app: Express) {
     try {
       const id = parseInt(req.params.id);
       const validated = updateUserSchema.parse(req.body);
+      const currentUser = (req as any).user;
+      const canManageUsers = currentUser.role === "admin" || currentUser.role === "supervisor";
+
+      if (!canManageUsers && currentUser.id !== id) {
+        return res.status(403).json({ message: "Permission refusée" });
+      }
+      if (!canManageUsers && (validated.role !== undefined || validated.status !== undefined || validated.isActive !== undefined)) {
+        return res.status(403).json({ message: "Vous ne pouvez pas modifier les rôles ou le statut d'un compte." });
+      }
+      if (currentUser.role === "supervisor" && (validated.role !== undefined || validated.status !== undefined || validated.isActive !== undefined)) {
+        return res.status(403).json({ message: "Seul un administrateur peut modifier les rôles et le statut des comptes." });
+      }
       
       const updates: any = {};
       const fields = ["fullName", "phone", "phone2", "email", "neighborhood", "addressDetails", "preferredPickupDays", "isActive", "preferredTimeWindowStart", "preferredTimeWindowEnd", "vehicleType", "capacityInItems", "role"] as const;

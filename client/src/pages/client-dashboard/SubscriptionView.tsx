@@ -29,8 +29,8 @@ interface SubscriptionPlan {
 
 interface SubscriptionDisplay {
   preferredPickupDays?: string[];
-  preferredTimeWindowStart?: string;
-  preferredTimeWindowEnd?: string;
+  preferredTimeWindowStart?: string | null;
+  preferredTimeWindowEnd?: string | null;
 
   // Compatibilité anciennes données
   preferredPickupDay?: string;

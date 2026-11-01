@@ -8,6 +8,7 @@ import { insertSubscriptionSchema, insertPlanSelectionSchema } from "@shared/sch
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { parsePlanFeatures } from "../utils/plan-features";
 
 // ============================================================
 // FONCTIONS UTILITAIRES
@@ -29,7 +30,7 @@ export default function subscriptionRoutes(app: Express) {
   app.get("/api/subscription-plans", async (req: Request, res: Response) => {
     try {
       const plans = await storage.getSubscriptionPlans();
-      res.json(plans);
+      res.json(plans.map((plan) => ({ ...plan, features: parsePlanFeatures(plan.features) })));
     } catch (error) {
       console.error("Error fetching subscription plans:", error);
       res.status(500).json({ message: "Échec de la récupération des plans" });
@@ -123,7 +124,7 @@ export default function subscriptionRoutes(app: Express) {
         return res.status(404).json({ message: "Aucun abonnement actif" });
       }
       
-      res.json(sub);
+      res.json({ ...sub, plan: sub.plan ? { ...sub.plan, features: parsePlanFeatures(sub.plan.features) } : sub.plan });
     } catch (error) {
       console.error("Error fetching current subscription:", error);
       res.status(500).json({ message: "Échec de la récupération de l'abonnement" });
@@ -153,7 +154,7 @@ export default function subscriptionRoutes(app: Express) {
         return res.status(404).json({ message: "Aucun abonnement actif" });
       }
       
-      res.json(sub);
+      res.json({ ...sub, plan: sub.plan ? { ...sub.plan, features: parsePlanFeatures(sub.plan.features) } : sub.plan });
     } catch (error) {
       console.error("Error fetching subscription:", error);
       res.status(500).json({ message: "Échec de la récupération de l'abonnement" });
@@ -172,7 +173,7 @@ export default function subscriptionRoutes(app: Express) {
       }
 
       const sub = await db.query.subscriptions.findFirst({
-        where: eq(subscriptions.clientId, user.id),
+        where: and(eq(subscriptions.clientId, user.id), eq(subscriptions.isActive, true)),
         with: { plan: true }
       });
       
@@ -191,6 +192,7 @@ export default function subscriptionRoutes(app: Express) {
 
       res.json({ 
         ...sub, 
+        plan: sub.plan ? { ...sub.plan, features: parsePlanFeatures(sub.plan.features) } : sub.plan,
         ...userPrefs 
       });
     } catch (error) {

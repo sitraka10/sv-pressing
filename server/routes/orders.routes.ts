@@ -2,7 +2,7 @@
 import { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { orders, users, orderNotes, subscriptions } from "../../shared/schema";
+import { orders, users, orderNotes, subscriptions, deliveries, orderStatusHistory } from "../../shared/schema";
 import { eq, and, not, desc } from "drizzle-orm";
 import { isOrderLate, getLateType, recordLateDetection, recordLateResolution } from "../services/late-detection.service";
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
@@ -344,13 +344,20 @@ export default function orderRoutes(app: Express) {
       if (!client.isActive) return res.status(403).json({ message: "Client désactivé." });
 
       const activeSubscription = await db.query.subscriptions.findFirst({
-        where: eq(subscriptions.clientId, clientId),
+        where: and(eq(subscriptions.clientId, clientId), eq(subscriptions.isActive, true)),
         with: { plan: true }
       });
       if (!activeSubscription) return res.status(400).json({ message: "Pas d'abonnement actif." });
 
-      const pickupDate = new Date(req.body.pickupDate);
+      const pickupDateValue = req.body.pickupDate ?? req.body.scheduledPickupDate;
+      if (!pickupDateValue) return res.status(400).json({ message: "La date de ramassage est requise." });
+      const pickupDate = new Date(pickupDateValue);
       if (isNaN(pickupDate.getTime())) return res.status(400).json({ message: "Date invalide." });
+
+      const itemCount = Number(req.body.itemCount);
+      if (!Number.isInteger(itemCount) || itemCount < 1) {
+        return res.status(400).json({ message: "Le nombre d'articles doit être supérieur à zéro." });
+      }
 
       const deliveryDelayHours = activeSubscription.plan?.deliveryTimeHours || 48;
       const deliveryDate = new Date(pickupDate);
@@ -360,16 +367,71 @@ export default function orderRoutes(app: Express) {
         ...req.body,
         clientId,
         subscriptionId: activeSubscription.id,
+        itemCount,
         status: "to_pickup",
         scheduledPickupDate: pickupDate,
         scheduledDeliveryDate: deliveryDate,
       };
 
       const order = await storage.createOrder(orderData);
+      try {
+        await storage.addOrderStatusHistory(order.id, "to_pickup", "Commande créée", user.id);
+      } catch (historyError) {
+        console.error("Impossible d'enregistrer l'historique initial de la commande:", historyError);
+      }
       res.status(201).json(order);
     } catch (error) {
       console.error("Erreur POST /api/orders:", error);
       res.status(500).json({ message: "Échec de la création" });
+    }
+  });
+
+  // POST /api/orders/:id/request-delivery
+  app.post("/api/orders/:id/request-delivery", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = getUser(req);
+      const orderId = Number.parseInt(req.params.id, 10);
+      if (!Number.isInteger(orderId)) return res.status(400).json({ message: "ID de commande invalide" });
+      if (user.role !== "client") return res.status(403).json({ message: "Cette action est réservée aux clients" });
+
+      const order = await storage.getOrder(orderId);
+      if (!order) return res.status(404).json({ message: "Commande non trouvée" });
+      if (order.clientId !== user.id) return res.status(403).json({ message: "Permission refusée" });
+      if (order.status !== "ready_to_deliver" && order.status !== "to_deliver") {
+        return res.status(409).json({ message: "La commande doit être prête avant de demander sa livraison" });
+      }
+
+      const existingDelivery = await db.query.deliveries.findFirst({
+        where: and(eq(deliveries.orderId, orderId), eq(deliveries.type, "delivery")),
+      });
+      if (existingDelivery) return res.json(existingDelivery);
+
+      const delivery = await db.transaction(async (tx) => {
+        if (order.status === "ready_to_deliver") {
+          await tx.update(orders)
+            .set({ status: "to_deliver", statusChangedAt: new Date(), updatedAt: new Date() })
+            .where(eq(orders.id, orderId));
+          await tx.insert(orderStatusHistory).values({
+            orderId,
+            status: "to_deliver",
+            notes: "Livraison demandée par le client",
+            updatedBy: user.id,
+          });
+        }
+
+        const [createdDelivery] = await tx.insert(deliveries).values({
+          orderId,
+          type: "delivery",
+          status: "pending",
+          scheduledDate: order.scheduledDeliveryDate,
+        }).returning();
+        return createdDelivery;
+      });
+
+      return res.status(201).json(delivery);
+    } catch (error) {
+      console.error("Erreur POST /api/orders/:id/request-delivery:", error);
+      return res.status(500).json({ message: "Impossible d'enregistrer la demande de livraison" });
     }
   });
 
@@ -380,8 +442,30 @@ export default function orderRoutes(app: Express) {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "ID invalide" });
 
+      const existingOrder = await storage.getOrder(id);
+      if (!existingOrder) return res.status(404).json({ message: "Commande non trouvée" });
+      if (user.role === "client" && existingOrder.clientId !== user.id) {
+        return res.status(403).json({ message: "Permission refusée." });
+      }
+
       const updateData: any = { updatedAt: new Date() };
       const { status, itemCount, linensDetails, scheduledPickupDate, scheduledDeliveryDate, specialInstructions } = req.body;
+
+      if (user.role === "client" && (status !== undefined || itemCount !== undefined || linensDetails !== undefined || specialInstructions !== undefined)) {
+        return res.status(403).json({ message: "Vous ne pouvez modifier que les horaires de votre commande." });
+      }
+
+      if (user.role === "client" && scheduledPickupDate !== undefined && existingOrder.status !== "to_pickup") {
+        return res.status(409).json({ message: "Le ramassage ne peut plus être reprogrammé à cette étape." });
+      }
+      if (user.role === "client" && scheduledDeliveryDate !== undefined && !["ready_to_deliver", "to_deliver"].includes(existingOrder.status)) {
+        return res.status(409).json({ message: "La livraison ne peut être reprogrammée que lorsque la commande est prête." });
+      }
+
+      const allowedStatuses = ["to_pickup", "to_sort", "to_wash", "to_dry", "to_iron", "ready_to_deliver", "to_deliver", "delivered"];
+      if (status !== undefined && !allowedStatuses.includes(status)) {
+        return res.status(400).json({ message: "Statut de commande invalide." });
+      }
 
       if (status) {
         updateData.status = status;
@@ -393,12 +477,24 @@ export default function orderRoutes(app: Express) {
       }
       if (itemCount !== undefined) updateData.itemCount = parseInt(itemCount);
       if (linensDetails !== undefined) updateData.linensDetails = linensDetails;
-      if (scheduledPickupDate) updateData.scheduledPickupDate = scheduledPickupDate;
-      if (scheduledDeliveryDate) updateData.scheduledDeliveryDate = scheduledDeliveryDate;
+      if (scheduledPickupDate !== undefined) {
+        const parsedDate = new Date(scheduledPickupDate);
+        if (isNaN(parsedDate.getTime())) return res.status(400).json({ message: "Date de ramassage invalide." });
+        updateData.scheduledPickupDate = parsedDate;
+      }
+      if (scheduledDeliveryDate !== undefined) {
+        const parsedDate = new Date(scheduledDeliveryDate);
+        if (isNaN(parsedDate.getTime())) return res.status(400).json({ message: "Date de livraison invalide." });
+        updateData.scheduledDeliveryDate = parsedDate;
+      }
       if (specialInstructions) updateData.specialInstructions = specialInstructions;
 
       const updated = await storage.updateOrder(id, updateData);
       if (!updated) return res.status(404).json({ message: "Commande non trouvée" });
+
+      if (status && status !== existingOrder.status) {
+        await storage.addOrderStatusHistory(id, status, undefined, user.id);
+      }
 
       const order = await storage.getOrder(id);
       if (order && !order.isLate && isOrderLate(order)) {

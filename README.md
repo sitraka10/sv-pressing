@@ -219,6 +219,17 @@ npm run db:studio    # Interface d'administration DB
 
 ## Déploiement
 
+### Déploiement complet sur Render
+
+Le fichier `render.yaml` configure un service web unique qui construit le frontend Vite et l'API Express, puis sert les deux sur le même domaine.
+
+1. Créez une base PostgreSQL (Render ou un fournisseur compatible) et copiez son URL de connexion dans `DATABASE_URL`.
+2. Dans Render, créez un Blueprint depuis le dépôt et renseignez `DATABASE_URL`, `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PHONE` et `INITIAL_ADMIN_PASSWORD` (12 caractères minimum).
+3. Render génère `SESSION_SECRET`. Le démarrage applique les migrations puis crée le compte administrateur et les plans d'abonnement sur une base neuve.
+4. Après le premier démarrage réussi, vous pouvez supprimer les variables `INITIAL_ADMIN_*` de Render. Les données de démonstration `admin/admin123` sont réservées au mode développement.
+
+Le service utilise `/health` pour le contrôle de disponibilité. Le plan gratuit peut mettre le service en veille après une période sans requêtes.
+
 L'application est configurée pour un déploiement simple sur Replit avec :
 - Base de données PostgreSQL automatiquement provisionnée
 - Variables d'environnement pré-configurées

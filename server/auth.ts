@@ -154,11 +154,6 @@ router.post(
                   process.env.NODE_ENV ===
                   "production",
                 sameSite: "lax",
-                domain:
-                  process.env.NODE_ENV ===
-                  "production"
-                    ? ".svpressing.com"
-                    : undefined,
               }
             );
 

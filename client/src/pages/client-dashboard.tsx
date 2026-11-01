@@ -11,6 +11,7 @@ import { DashboardView } from './client-dashboard/DashboardView';
 import { OrdersView } from './client-dashboard/OrdersView';
 import { SubscriptionView } from './client-dashboard/SubscriptionView';
 import { InvoicesView } from './client-dashboard/InvoicesView';
+import type { Invoice } from './client-dashboard/InvoicesView';
 import { ProfileView } from './client-dashboard/ProfileView';
 
 // Components
@@ -52,8 +53,11 @@ interface Subscription {
   planId: number;
   isActive: boolean;
   startDate: Date;
-  preferredPickupDay: string;
+  preferredPickupDay?: string;
   preferredPickupTime: string;
+  preferredPickupDays?: string[];
+  preferredTimeWindowStart?: string | null;
+  preferredTimeWindowEnd?: string | null;
   specialInstructions?: string;
   plan: {
     name: string;
@@ -208,7 +212,10 @@ export default function ClientDashboard() {
 
   // --- MUTATIONS ---
   const schedulePickupMutation = useMutation({
-    mutationFn: (data: z.infer<typeof schedulePickupSchema>) => apiRequest("POST", "/api/orders", data),
+    mutationFn: (data: z.infer<typeof schedulePickupSchema>) => apiRequest("POST", "/api/orders", {
+      ...data,
+      pickupDate: data.scheduledPickupDate,
+    }),
     onSuccess: () => {
       toast({ title: "Ramassage Programmé!", description: "Votre demande a bien été enregistrée." });
       setSchedulePickupOpen(false);
@@ -339,8 +346,8 @@ export default function ClientDashboard() {
       upgradeSubscriptionForm.reset({
         planId: subscription.planId,
         preferredPickupDays: subscription.preferredPickupDays || [],
-        preferredTimeWindowStart: subscription.preferredTimeWindowStart,
-        preferredTimeWindowEnd: subscription.preferredTimeWindowEnd,
+        preferredTimeWindowStart: subscription.preferredTimeWindowStart ?? undefined,
+        preferredTimeWindowEnd: subscription.preferredTimeWindowEnd ?? undefined,
         specialInstructions: subscription.specialInstructions || ""
       });
     }
@@ -373,7 +380,7 @@ export default function ClientDashboard() {
 
 
   // --- UI COMPONENTS ---
-  const StatCard = ({ title, value, icon: Icon, color }) => (
+  const StatCard = ({ title, value, icon: Icon, color }: { title: string; value: React.ReactNode; icon: React.ElementType; color: string }) => (
     <Card className="p-6 flex items-center gap-6 bg-white rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
       <div className={`w-16 h-16 rounded-xl flex items-center justify-center ${color} shadow-lg`}>
         <Icon className="w-8 h-8 text-white" />
@@ -564,7 +571,7 @@ export default function ClientDashboard() {
   const PickupReminder = () => {
     if (!subscription?.preferredPickupDay) return null;
 
-    const dayMapping = { "dimanche": 0, "lundi": 1, "mardi": 2, "mercredi": 3, "jeudi": 4, "vendredi": 5, "samedi": 6 };
+    const dayMapping: Record<string, number> = { "dimanche": 0, "lundi": 1, "mardi": 2, "mercredi": 3, "jeudi": 4, "vendredi": 5, "samedi": 6 };
     const today = getDay(new Date());
     const targetDay = dayMapping[subscription.preferredPickupDay.toLowerCase()];
     if (targetDay === undefined) return null;

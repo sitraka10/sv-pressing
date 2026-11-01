@@ -61,6 +61,10 @@ const httpServer = createHttpServer(app);
  
 const isProduction =
   process.env.NODE_ENV === 'production';
+
+if (isProduction && !process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET must be configured in production');
+}
  
 const isDevelopment =
   process.env.NODE_ENV === 'development' ||
@@ -364,9 +368,6 @@ const sessionCookieConfig: session.CookieOptions = {
  
   path: '/',
  
-  domain: isProduction
-    ? '.svpressing.com'
-    : undefined,
 };
  
 const sessionConfig: session.SessionOptions = {
@@ -1061,7 +1062,9 @@ app.use(
       const clientDistPath =
         path.resolve(
           __dirname,
-          'public'
+          '..',
+          'client',
+          'dist'
         );
  
       app.use(

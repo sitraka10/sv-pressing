@@ -953,7 +953,7 @@ export function CustomQuotesSection({
   setNewPlanData: (d: any) => void;
   setIsNewPlanOpen: (v: boolean) => void;
   setActiveTab: (v: string) => void;
-  toast: (opts: { title: string; description?: string; variant?: string }) => void;
+  toast: (opts: { title: string; description?: string; variant?: "default" | "destructive" | null }) => void;
   safeFormatDate: SafeFormatDate;
   createPlanMutation?: any;
   queryClient?: any;

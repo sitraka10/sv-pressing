@@ -49,6 +49,7 @@ import {
 
 import { eq, and, desc, inArray, sql, lte, gte, not, lt } from "drizzle-orm";
 import { db } from "./db";
+import { serializePlanFeatures } from "./utils/plan-features";
 
 // ============================================================
 // INTERFACE IStorage
@@ -326,6 +327,7 @@ export class WorkingDatabaseStorage implements IStorage {
         .insert(subscriptionPlans)
         .values({
           ...plan,
+          features: serializePlanFeatures(plan.features),
           isActive: plan.isActive ?? true,
           deliveryTimeHours: plan.deliveryTimeHours ?? 24,
         })
@@ -341,7 +343,11 @@ export class WorkingDatabaseStorage implements IStorage {
     try {
       const [updatedPlan] = await db
         .update(subscriptionPlans)
-        .set({ ...updates, updatedAt: new Date() })
+        .set({
+          ...updates,
+          ...(updates.features !== undefined ? { features: serializePlanFeatures(updates.features) } : {}),
+          updatedAt: new Date(),
+        })
         .where(eq(subscriptionPlans.id, planId))
         .returning();
       return updatedPlan;

@@ -15,7 +15,51 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 export async function initializeDatabase() {
-  console.log("Initializing database with sample data...");
+  console.log("Initializing database...");
+
+  if (process.env.NODE_ENV === "production") {
+    const existingAdmin = await db.select().from(users).where(eq(users.role, "admin")).limit(1);
+    if (existingAdmin.length === 0) {
+      const username = process.env.INITIAL_ADMIN_USERNAME;
+      const email = process.env.INITIAL_ADMIN_EMAIL;
+      const phone = process.env.INITIAL_ADMIN_PHONE;
+      const password = process.env.INITIAL_ADMIN_PASSWORD;
+      if (!username || !email || !phone || !password || password.length < 12) {
+        throw new Error("For the first production start, set INITIAL_ADMIN_USERNAME, INITIAL_ADMIN_EMAIL, INITIAL_ADMIN_PHONE, and INITIAL_ADMIN_PASSWORD (at least 12 characters)");
+      }
+
+      const passwordHash = await hashPassword(password);
+      await db.insert(users).values({
+        username,
+        email,
+        password: passwordHash,
+        fullName: "Administrateur SV",
+        phone,
+        address: "Antananarivo, Madagascar",
+        role: "admin",
+        isActive: true,
+        status: "approved",
+      });
+      console.log("Created production admin");
+    }
+
+    const planData = [
+      { name: "Essentiel", type: "essential" as const, pricePerMonth: "25000", itemsIncluded: 10, pickupsPerWeek: 1, deliveryTimeHours: 48, features: ["Lavage standard", "Séchage", "Pliage soigné", "Collecte hebdomadaire"], isActive: true },
+      { name: "Famille", type: "family" as const, pricePerMonth: "45000", itemsIncluded: 25, pickupsPerWeek: 2, deliveryTimeHours: 24, features: ["Lavage premium", "Séchage rapide", "Repassage inclus", "Collecte bi-hebdomadaire", "Service prioritaire"], isActive: true },
+      { name: "Premium", type: "premium" as const, pricePerMonth: "75000", itemsIncluded: 50, pickupsPerWeek: 3, deliveryTimeHours: 12, features: ["Lavage de luxe", "Séchage express", "Repassage professionnel", "Collecte tri-hebdomadaire", "Service VIP", "Traitement spécialisé"], isActive: true },
+    ];
+    const existingPlans = await db.select({ name: subscriptionPlans.name }).from(subscriptionPlans);
+    const existingPlanNames = new Set(existingPlans.map((plan) => plan.name));
+    const missingPlans = planData.filter((plan) => !existingPlanNames.has(plan.name));
+    if (missingPlans.length > 0) {
+      await db.insert(subscriptionPlans).values(missingPlans.map((plan) => ({
+        ...plan,
+        features: JSON.stringify(plan.features),
+      })) as any);
+      console.log(`Created ${missingPlans.length} missing production subscription plans`);
+    }
+    return;
+  }
 
   // Check if admin user already exists
   const existingAdmin = await db.select().from(users).where(eq(users.username, 'admin')).limit(1);
@@ -47,7 +91,10 @@ export async function initializeDatabase() {
     { name: "Famille", type: "family" as const, pricePerMonth: "45000", itemsIncluded: 25, pickupsPerWeek: 2, deliveryTimeHours: 24, features: ["Lavage premium", "Séchage rapide", "Repassage inclus", "Collecte bi-hebdomadaire", "Service prioritaire"], isActive: true },
     { name: "Premium", type: "premium" as const, pricePerMonth: "75000", itemsIncluded: 50, pickupsPerWeek: 3, deliveryTimeHours: 12, features: ["Lavage de luxe", "Séchage express", "Repassage professionnel", "Collecte tri-hebdomadaire", "Service VIP", "Traitement spécialisé"], isActive: true }
   ];
-  const insertedPlans = await db.insert(subscriptionPlans).values(planData as any).returning();
+  const insertedPlans = await db.insert(subscriptionPlans).values(planData.map((plan) => ({
+    ...plan,
+    features: JSON.stringify(plan.features),
+  })) as any).returning();
   console.log(`Created ${insertedPlans.length} subscription plans`);
 
   // Create subscriptions for clients

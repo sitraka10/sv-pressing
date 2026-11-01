@@ -11,23 +11,48 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { Package, ShoppingBag, Star, Calendar as CalendarIcon, Truck, CheckCircle, Droplet, Wind, Zap, Info, Loader2, Edit, ArrowUp, ArrowDown } from "lucide-react";
+import { Package, ShoppingBag, Star, Calendar as CalendarIcon, Truck, CheckCircle, Droplet, Wind, Zap, Info, Loader2, Edit, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from "@/hooks/use-toast";
 
 // --- Interfaces ---
+type OrderStatus = "to_pickup" | "to_sort" | "to_wash" | "to_dry" | "to_iron" | "ready_to_deliver" | "to_deliver" | "delivered";
+
 interface Order {
     id: number;
-    status: "to_pickup" | "to_sort" | "to_wash" | "to_dry" | "to_iron" | "ready_to_deliver" | "to_deliver" | "delivered";
-    itemCount: number;
-    scheduledPickupDate: Date;
-    scheduledDeliveryDate: Date;
-    createdAt: Date;
+    status: OrderStatus;
+    itemCount: number | null;
+    scheduledPickupDate: Date | string | null;
+    scheduledDeliveryDate: Date | string | null;
+    actualDeliveryDate?: Date | string | null;
+    createdAt: Date | string;
 }
 interface Subscription {
-    plan: { name: string; };
-    preferredPickupDay: string;
+    plan?: { name: string } | null;
+    preferredPickupDay?: string;
+}
+
+interface DashboardViewProps {
+    orders: Order[];
+    subscription?: Subscription | null;
+    onSchedulePickup: () => void;
+    onRequestDelivery: (orderId: number) => void;
+    isRequestingDelivery: boolean;
+}
+
+interface StatCardProps {
+    title: string;
+    value: React.ReactNode;
+    icon: LucideIcon;
+    color: string;
+    trend?: "up" | "down";
+    trendText?: string;
+}
+
+interface RescheduleMutation {
+    isPending: boolean;
+    mutate: (variables: { orderId: number; updates: Partial<Order> }) => void;
 }
 
 // --- Schéma de validation pour la reprogrammation ---
@@ -53,7 +78,7 @@ const formatDate = (date: any, formatStr = "dd MMMM yyyy") => {
 };
 
 // --- Sous-Composants de la Vue ---
-const StatCard = ({ title, value, icon: Icon, color, trend, trendText }) => (
+const StatCard = ({ title, value, icon: Icon, color, trend, trendText }: StatCardProps) => (
     <Card
         role="group"
         tabIndex={0}
@@ -79,7 +104,7 @@ const StatCard = ({ title, value, icon: Icon, color, trend, trendText }) => (
 );
 
 // ✅ NOUVEAU COMPOSANT DE SUIVI, CONFORME À L'IMAGE
-const OrderStatusTracker = ({ currentStatus }) => {
+const OrderStatusTracker = ({ currentStatus }: { currentStatus: OrderStatus }) => {
     const currentStepIndex = statusSteps.indexOf(currentStatus);
     return (
         <div className="w-full overflow-x-auto">
@@ -113,7 +138,7 @@ const OrderStatusTracker = ({ currentStatus }) => {
     );
 };
 
-const OrderCard = ({ order }) => {
+const OrderCard = ({ order }: { order: Order }) => {
     const { label, message } = statusConfig[order.status];
     return (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -137,8 +162,14 @@ const OrderCard = ({ order }) => {
     );
 };
 
-const RescheduleDialog = ({ open, onOpenChange, order, type, mutation }) => {
-    const form = useForm({ resolver: zodResolver(rescheduleSchema) });
+const RescheduleDialog = ({ open, onOpenChange, order, type, mutation }: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    order: Order;
+    type: "pickup" | "delivery";
+    mutation: RescheduleMutation;
+}) => {
+    const form = useForm<z.infer<typeof rescheduleSchema>>({ resolver: zodResolver(rescheduleSchema) });
     const title = type === 'pickup' ? "Reporter le Ramassage" : "Reporter la Livraison";
     const currentDate = type === 'pickup' ? order.scheduledPickupDate : order.scheduledDeliveryDate;
 
@@ -151,7 +182,7 @@ const RescheduleDialog = ({ open, onOpenChange, order, type, mutation }) => {
         }
     }, [currentDate, form]);
 
-    const onSubmit = (data) => {
+    const onSubmit = (data: z.infer<typeof rescheduleSchema>) => {
         const [year, month, day] = data.newDate.split('-').map(Number);
         const [hours, minutes] = data.newTime.split(':').map(Number);
         const finalDate = new Date(year, month - 1, day, hours, minutes);
@@ -189,7 +220,13 @@ const RescheduleDialog = ({ open, onOpenChange, order, type, mutation }) => {
     );
 };
 
-const SmartActionCard = ({ order, onSchedulePickup, rescheduleMutation }) => {
+const SmartActionCard = ({ order, onSchedulePickup, onRequestDelivery, isRequestingDelivery, rescheduleMutation }: {
+    order?: Order;
+    onSchedulePickup: () => void;
+    onRequestDelivery: (orderId: number) => void;
+    isRequestingDelivery: boolean;
+    rescheduleMutation: RescheduleMutation;
+}) => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogType, setDialogType] = useState<'pickup' | 'delivery'>('pickup');
 
@@ -227,6 +264,16 @@ const SmartActionCard = ({ order, onSchedulePickup, rescheduleMutation }) => {
                             <Edit className="mr-1 h-3 w-3" /> Modifier
                         </Button>
                     </div>
+                    {order.status === "ready_to_deliver" && (
+                        <Button
+                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            disabled={isRequestingDelivery}
+                            onClick={() => onRequestDelivery(order.id)}
+                        >
+                            {isRequestingDelivery ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Truck className="mr-2 h-4 w-4" />}
+                            Demander la livraison
+                        </Button>
+                    )}
                 </div>
             </Card>
             <RescheduleDialog open={dialogOpen} onOpenChange={setDialogOpen} order={order} type={dialogType} mutation={rescheduleMutation} />
@@ -235,7 +282,7 @@ const SmartActionCard = ({ order, onSchedulePickup, rescheduleMutation }) => {
 };
 
 // --- Composant Principal de la Vue ---
-export function DashboardView({ orders, subscription, onSchedulePickup }) {
+export function DashboardView({ orders, subscription, onSchedulePickup, onRequestDelivery, isRequestingDelivery }: DashboardViewProps) {
     const queryClient = useQueryClient();
     const { toast } = useToast();
 
@@ -250,7 +297,29 @@ export function DashboardView({ orders, subscription, onSchedulePickup }) {
     });
 
     const currentOrders = orders.filter(o => o.status !== "delivered");
-    const mostRecentOrder = currentOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const mostRecentOrder = [...currentOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+    const completedOrders = orders.filter((order) => order.status === "delivered");
+    const itemsInMonth = completedOrders
+        .filter((order) => {
+            const completedAt = new Date(order.actualDeliveryDate ?? order.createdAt).getTime();
+            return completedAt >= monthStart && completedAt < nextMonthStart;
+        })
+        .reduce((total, order) => total + (order.itemCount ?? 0), 0);
+    const itemsInPreviousMonth = completedOrders
+        .filter((order) => {
+            const completedAt = new Date(order.actualDeliveryDate ?? order.createdAt).getTime();
+            return completedAt >= previousMonthStart && completedAt < monthStart;
+        })
+        .reduce((total, order) => total + (order.itemCount ?? 0), 0);
+    const monthlyItemsChange = itemsInMonth - itemsInPreviousMonth;
+    const activeOrdersThisMonth = orders.filter((order) => {
+        const createdAt = new Date(order.createdAt).getTime();
+        return order.status !== "delivered" && createdAt >= monthStart && createdAt < nextMonthStart;
+    }).length;
 
     const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
     const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1 } };
@@ -269,9 +338,9 @@ export function DashboardView({ orders, subscription, onSchedulePickup }) {
                     <section aria-labelledby="dashboard-overview">
                         <h2 id="dashboard-overview" className="sr-only">Aperçu</h2>
                         <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" variants={itemVariants}>
-                            <StatCard title="Commandes en cours" value={currentOrders.length} icon={Package} color="bg-gradient-to-br from-cyan-500 to-blue-500" trend="up" trendText="+2 ce mois-ci" />
-                            <StatCard title="Pièces traitées (mois)" value={orders.reduce((acc, o) => acc + o.itemCount, 0)} icon={ShoppingBag} color="bg-gradient-to-br from-amber-500 to-orange-500" trend="down" trendText="-15 vs mois dernier" />
-                            <StatCard title="Abonnement" value={subscription?.plan.name || "Aucun"} icon={Star} color="bg-gradient-to-br from-cyan-600 to-blue-500" />
+                            <StatCard title="Commandes en cours" value={currentOrders.length} icon={Package} color="bg-gradient-to-br from-cyan-500 to-blue-500" trend={activeOrdersThisMonth > 0 ? "up" : undefined} trendText={`${activeOrdersThisMonth} nouvelle(s) ce mois`} />
+                            <StatCard title="Pièces traitées (mois)" value={itemsInMonth} icon={ShoppingBag} color="bg-gradient-to-br from-amber-500 to-orange-500" trend={monthlyItemsChange >= 0 ? "up" : "down"} trendText={`${monthlyItemsChange > 0 ? "+" : ""}${monthlyItemsChange} vs mois précédent`} />
+                            <StatCard title="Abonnement" value={subscription?.plan?.name || "Aucun"} icon={Star} color="bg-gradient-to-br from-cyan-600 to-blue-500" />
                         </motion.div>
                     </section>
 
@@ -296,6 +365,8 @@ export function DashboardView({ orders, subscription, onSchedulePickup }) {
                             <SmartActionCard
                                 order={mostRecentOrder}
                                 onSchedulePickup={onSchedulePickup}
+                                onRequestDelivery={onRequestDelivery}
+                                isRequestingDelivery={isRequestingDelivery}
                                 rescheduleMutation={rescheduleMutation}
                             />
                         </motion.div>

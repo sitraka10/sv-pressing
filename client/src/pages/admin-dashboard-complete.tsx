@@ -571,11 +571,12 @@ export default function AdminDashboardComplete() {
   const updateSubscriptionPlanMutation = useMutation({ mutationFn: async ({ subscriptionId, newPlanId }: any) => (await apiRequest("PATCH", `/api/subscriptions/${subscriptionId}`, { planId: newPlanId })).json(), onSuccess: () => { toast({ title: "Plan mis à jour" }); invalidate("/api/users", "subscriptions", "/api/dashboard/stats"); setIsSubscriptionDialogOpen(false); }, onError: (e) => fail(e) });
 
   const handleStatusChange = (orderId: number, status: string) => { if (status === "to_sort") { setSortingOrderId(orderId); setIsSortingDialogOpen(true); } else updateOrderStatusMutation.mutate({ orderId, status }); };
+  const handleAddNote = (_orderId: number, _noteContent: string) => {
+    invalidate("/api/orders");
+  };
   const handleSortingConfirm = () => { if (!sortingData.itemCount || !sortingOrderId) { toast({ title: "Champ requis", variant: "destructive" }); return; } updateOrderStatusMutation.mutate({ orderId: sortingOrderId, status: "to_wash", itemCount: parseInt(sortingData.itemCount), linensDetails: sortingData.linensDetails || undefined }); };
   const openRegistrationConfirm = (u: any, action: "approve" | "refuse") => { setSelectedRegistrationUser(u); setRegistrationAction(action); setIsRegistrationConfirmOpen(true); };
   const handleRegistrationAction = async () => { if (!selectedRegistrationUser || !registrationAction) return; setIsRegistrationProcessing(true); try { await toggleUserStatusMutation.mutateAsync({ id: selectedRegistrationUser.id, status: registrationAction === "approve" ? "approved" : "refused" }); setIsRegistrationConfirmOpen(false); setSelectedRegistrationUser(null); setRegistrationAction(null); } finally { setIsRegistrationProcessing(false); } };
-
-  if (user?.role !== "admin") return <div className="p-6 text-center text-sm text-slate-500">Accès réservé aux administrateurs.</div>;
 
   const pendingRegistrations = safeUsers.filter((u: any) => u.role === "client" && u.status === "pending");
 
@@ -588,6 +589,8 @@ export default function AdminDashboardComplete() {
       (u.phone || '').includes(q)
     );
   }, [pendingRegistrations, registrationSearch]);
+
+  if (user?.role !== "admin") return <div className="p-6 text-center text-sm text-slate-500">Accès réservé aux administrateurs.</div>;
 
   const lastIdx = registrationsCurrentPage * registrationsPerPage;
   const currentRegistrations = filteredRegistrations.slice(lastIdx - registrationsPerPage, lastIdx);
@@ -739,7 +742,7 @@ export default function AdminDashboardComplete() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsContent value="dashboard" className="mt-0"><ExecutiveDashboardBI /></TabsContent>
               <TabsContent value="volume-analysis" className="mt-0"><VolumeAnalysisTab orders={safeOrders} users={safeUsers} subscriptions={safeSubs} subscriptionPlans={safePlans} /></TabsContent>
-              <TabsContent value="orders" className="mt-0"><OrdersTab orders={safeOrders} users={safeUsers} deliveries={safeDeliveries} handleStatusChange={handleStatusChange} setSelectedOrder={setSelectedOrder} setIsOrderDetailsOpen={setIsOrderDetailsOpen} /></TabsContent>
+              <TabsContent value="orders" className="mt-0"><OrdersTab orders={safeOrders} users={safeUsers} deliveries={safeDeliveries} handleStatusChange={handleStatusChange} handleAddNote={handleAddNote} setSelectedOrder={setSelectedOrder} setIsOrderDetailsOpen={setIsOrderDetailsOpen} /></TabsContent>
               <TabsContent value="deliveries" className="mt-0"><DeliveriesAndPickupsTab orders={safeOrders} users={safeUsers} deliveries={safeDeliveries} queryClient={queryClient} /></TabsContent>
               <TabsContent value="clients" className="mt-0"><ClientsTab users={safeUsers} orders={safeOrders} subscriptions={safeSubs} subscriptionPlans={safePlans} externalNewClientData={{}} externalOpenNewClient={false} onConsumeExternalOpen={() => {}} /></TabsContent>
               <TabsContent value="agents" className="mt-0"><AgentsTab users={safeUsers} /></TabsContent>

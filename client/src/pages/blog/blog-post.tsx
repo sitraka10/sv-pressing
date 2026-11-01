@@ -99,6 +99,8 @@ const BlogPostPage: React.FC = () => {
     );
   }
 
+  const currentPost = post;
+
   return (
     <div className="min-h-screen bg-[#e0e5ec]">
       {/* ============================================================
@@ -391,7 +393,7 @@ const BlogPostPage: React.FC = () => {
                 <h3 className="text-lg font-bold text-[#0B676E]">Articles récents</h3>
               </div>
               <ul className="space-y-3">
-                {recentPosts.filter(function(p) { return p.id !== post.id; }).slice(0, 5).map(function(recent) {
+                {recentPosts.filter(function(p) { return p.id !== currentPost.id; }).slice(0, 5).map(function(recent) {
                   var iconClass = getCategoryIcon(recent.category);
                   return (
                     <li key={recent.id}>

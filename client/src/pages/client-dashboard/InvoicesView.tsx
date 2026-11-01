@@ -11,11 +11,11 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 // --- Interfaces ---
-interface Invoice {
+export interface Invoice {
   id: number;
   invoiceNumber?: string;
   amount: string;
-  status: 'paid' | 'pending' | 'overdue' | 'cancelled'; // Le champ correct à utiliser
+  status: 'paid' | 'pending' | 'overdue' | 'cancelled' | 'partial'; // Le champ correct à utiliser
   isPaid: boolean; // Gardé pour la compatibilité, mais non utilisé pour l'affichage du statut
   createdAt: Date;
   dueDate?: Date;

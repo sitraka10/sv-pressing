@@ -4,11 +4,23 @@ import {
   StageTransition, RiskAlert, IntelligentRecommendation, StageHistoryEntry 
 } from "../types";
 import { WORKFLOW_STEPS } from "../constants";
+import { Package, Shirt, Droplet, Wind, CheckCircle, Truck, type LucideIcon } from "lucide-react";
 import { 
   parseISO, addHours, subDays, differenceInHours, 
   format, isValid 
 } from "date-fns";
 import { getOrderCountdown } from "./sla";
+
+const stageIcons: Record<string, LucideIcon> = {
+  to_pickup: Package,
+  to_sort: Package,
+  to_wash: Droplet,
+  to_dry: Wind,
+  to_iron: Shirt,
+  ready_to_deliver: CheckCircle,
+  to_deliver: Truck,
+  delivered: CheckCircle,
+};
 
 export const generateStageHistory = (order: Order): StageHistoryEntry[] => {
   const history: StageHistoryEntry[] = [];
@@ -112,7 +124,7 @@ export const calculateStageMetrics = (orders: Order[], now: Date): StageMetrics[
       delayedCount: delayed,
       delayPercentage: allOrdersThatPassedStage.length > 0 ? Math.round((delayed / allOrdersThatPassedStage.length) * 100) : 0,
       throughput: Math.round(throughput * 100) / 100, trend: avgTime > step.sla * 1.1 ? 'down' : avgTime < step.sla * 0.9 ? 'up' : 'stable',
-      color: step.color, icon: step.icon, totalTimeSpent: Math.round(totalTimeSpent * 10) / 10,
+      color: step.color, icon: stageIcons[step.status] ?? Package, totalTimeSpent: Math.round(totalTimeSpent * 10) / 10,
       efficiency: Math.round(efficiency), waitingOrders: waitingOrders, capacity: step.capacity,
       utilization: Math.round(utilization), slaHours: step.sla
     };
