@@ -12,10 +12,10 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Configuration du pool PostgreSQL local
+// Neon requires SSL in production; local PostgreSQL can stay unencrypted.
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: false, // Pas de SSL pour PostgreSQL local
+  ssl: process.env.NODE_ENV === 'production' ? true : false,
 });
 
 pool.on('error', (err) => {
