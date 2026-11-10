@@ -1437,25 +1437,23 @@ async createCustomQuote(quote: InsertCustomQuote): Promise<CustomQuote> {
 
   async updateCashBalance(amount: number, type: 'income' | 'expense', transactionId?: number, userId?: number): Promise<void> {
     try {
-      const balance = await db.select().from(cashBalance).limit(1);
-      const currentBalance = balance.length > 0 ? parseFloat(balance[0].balance || "0") : 0;
-      const newBalance = type === 'income' ? currentBalance + amount : currentBalance - amount;
-      
-      if (balance.length === 0) {
+      // Atomic arithmetic prevents concurrent transactions from overwriting each other.
+      const delta = type === 'income' ? amount : -amount;
+      const [updated] = await db
+        .update(cashBalance)
+        .set({
+          balance: sql`${cashBalance.balance} + ${delta}`,
+          lastUpdated: new Date(),
+          updatedBy: userId,
+        })
+        .returning({ id: cashBalance.id });
+
+      if (!updated) {
         await db.insert(cashBalance).values({
-          balance: newBalance.toString(),
+          balance: String(delta),
           lastUpdated: new Date(),
           updatedBy: userId,
         });
-      } else {
-        await db
-          .update(cashBalance)
-          .set({
-            balance: newBalance.toString(),
-            lastUpdated: new Date(),
-            updatedBy: userId,
-          })
-          .where(eq(cashBalance.id, balance[0].id));
       }
     } catch (error) {
       console.error("[CASH] Erreur updateCashBalance:", error);

@@ -145,12 +145,16 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
 
   const handleCreateOrUpdatePlan = () => {
     if (!newPlanData.visibility) { toast({ title: "Type requis", description: "Choisissez Public ou Privé.", variant: "destructive" }); return; }
-    if (!newPlanData.name || !newPlanData.pricePerMonth || isNaN(Number(newPlanData.pricePerMonth)) || !newPlanData.itemsIncluded || isNaN(Number(newPlanData.itemsIncluded)) || !newPlanData.pickupsPerWeek || isNaN(Number(newPlanData.pickupsPerWeek)) || !newPlanData.deliveryTimeHours || isNaN(Number(newPlanData.deliveryTimeHours))) {
-      toast({ title: "Champs requis", description: "Remplissez tous les champs obligatoires (*).", variant: "destructive" }); return;
+    const price = Number(newPlanData.pricePerMonth);
+    const items = Number(newPlanData.itemsIncluded);
+    const pickups = Number(newPlanData.pickupsPerWeek);
+    const deliveryHours = Number(newPlanData.deliveryTimeHours);
+    if (!newPlanData.name?.trim() || !Number.isFinite(price) || price <= 0 || !Number.isInteger(items) || items <= 0 || !Number.isInteger(pickups) || pickups < 0 || !Number.isInteger(deliveryHours) || deliveryHours <= 0) {
+      toast({ title: "Informations à vérifier", description: "Saisissez un nom, un prix positif, un nombre d’articles positif, des ramassages valides et un délai en heures.", variant: "destructive" }); return;
     }
     const featuresArray = Array.isArray(newPlanData.features) ? newPlanData.features : [];
     const planData = { 
-      name: newPlanData.name, pricePerMonth: `${newPlanData.pricePerMonth} Ar`, 
+      name: newPlanData.name.trim(), pricePerMonth: `${price} Ar`, 
       type: newPlanData.visibility === "private" ? "custom" : "essential", 
       itemsIncluded: Number(newPlanData.itemsIncluded), pickupsPerWeek: Number(newPlanData.pickupsPerWeek), 
       deliveryTimeHours: Number(newPlanData.deliveryTimeHours), isActive: newPlanData.isActive !== false, 
@@ -218,11 +222,11 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
     const isPrivate = plan.type === "custom";
     return (
       <div className={cn(ui.card, "relative flex flex-col transition-all hover:border-slate-300 hover:shadow-md group", !plan.isActive && "opacity-70")}>
-        <div className="p-5 flex-1 flex flex-col gap-4">
+        <div className="p-4 flex-1 flex flex-col gap-3">
           {/* Header */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-3 min-w-0">
-              <div className={cn("shrink-0 h-10 w-10 rounded-lg flex items-center justify-center text-white text-[13px] font-bold shadow-sm", isPrivate ? "bg-gradient-to-br from-violet-500 to-purple-600" : "bg-gradient-to-br from-[#0B676E] to-[#09565C]")}>
+              <div className={cn("shrink-0 h-9 w-9 rounded-lg flex items-center justify-center text-white text-[12px] font-bold shadow-sm", isPrivate ? "bg-gradient-to-br from-violet-500 to-purple-600" : "bg-gradient-to-br from-[#0B676E] to-[#09565C]")}>
                 P
               </div>
               <div className="min-w-0">
@@ -252,14 +256,14 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
 
           {/* Price & Stats */}
           <div className="flex items-baseline gap-1.5">
-            <span className="text-[28px] leading-none font-bold text-slate-900 tabular-nums">{formatPrice(plan.pricePerMonth)}</span>
+            <span className="text-[23px] leading-none font-bold text-slate-900 tabular-nums">{formatPrice(plan.pricePerMonth)}</span>
             <span className="text-[12px] font-medium text-slate-500">Ar/mois</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 bg-slate-50 rounded-lg p-3 border border-slate-100">
-            <div className="text-center"><p className="text-[15px] font-semibold text-slate-900 tabular-nums">{plan.itemsIncluded}</p><p className="text-[10px] text-slate-500 uppercase tracking-wider">Articles</p></div>
-            <div className="text-center border-x border-slate-200"><p className="text-[15px] font-semibold text-slate-900 tabular-nums">{plan.pickupsPerWeek}x</p><p className="text-[10px] text-slate-500 uppercase tracking-wider">Ramassages</p></div>
-            <div className="text-center"><p className="text-[15px] font-semibold text-slate-900 tabular-nums">{plan.deliveryTimeHours}h</p><p className="text-[10px] text-slate-500 uppercase tracking-wider">Livraison</p></div>
+          <div className="grid grid-cols-3 gap-1 bg-slate-50 rounded-lg p-2 border border-slate-100">
+            <div className="text-center"><p className="text-[13px] font-semibold text-slate-900 tabular-nums">{plan.itemsIncluded}</p><p className="text-[9px] text-slate-500 uppercase tracking-wider">Articles</p></div>
+            <div className="text-center border-x border-slate-200"><p className="text-[13px] font-semibold text-slate-900 tabular-nums">{plan.pickupsPerWeek}x</p><p className="text-[9px] text-slate-500 uppercase tracking-wider">Ramassages</p></div>
+            <div className="text-center"><p className="text-[13px] font-semibold text-slate-900 tabular-nums">{plan.deliveryTimeHours}h</p><p className="text-[9px] text-slate-500 uppercase tracking-wider">Livraison</p></div>
           </div>
 
           {/* Features */}
@@ -275,7 +279,7 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
         </div>
 
         {/* Footer Actions */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-1.5 rounded-b-xl">
+        <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-1.5 rounded-b-xl">
           <IconButton icon={<Edit className="h-3.5 w-3.5" />} label="Modifier" onClick={() => openEditPlan(plan)} className="text-violet-600 border-violet-200 hover:bg-violet-50" />
           <IconButton icon={updatePlanMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : plan.isActive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />} label={plan.isActive ? "Désactiver" : "Activer"} onClick={() => updatePlanMutation.mutate({ id: plan.id, updates: { isActive: !plan.isActive } })} disabled={updatePlanMutation.isPending} className={plan.isActive ? "text-amber-600 border-amber-200 hover:bg-amber-50" : "text-[#0B676E] border-[#0B676E]/30 hover:bg-[#0B676E]/10"} />
           <IconButton icon={deletePlanMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} label="Supprimer" onClick={() => { if (confirm(`Supprimer le plan "${plan.name}" ?`)) deletePlanMutation.mutate(plan.id); }} disabled={deletePlanMutation.isPending} className="text-red-600 border-red-200 hover:bg-red-50" />
@@ -397,7 +401,7 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
               )}
             </div>
           ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch">
               {currentPlans.map((plan: any) => <PlanGridCard key={plan.id} plan={plan} />)}
             </div>
           ) : (
@@ -428,7 +432,7 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
             DIALOG: NOUVEAU / MODIFIER PLAN
             ============================================================ */}
         <Dialog open={isNewPlanOpen} onOpenChange={(open) => { setIsNewPlanOpen(open); if (!open) resetForm(); }}>
-          <DialogContent className={cn(ui.dialog, "max-w-[95vw] sm:max-w-[720px] max-h-[90vh] overflow-hidden p-0 flex flex-col")}>
+          <DialogContent className={cn(ui.dialog, "max-w-[94vw] sm:max-w-[820px] max-h-[90vh] overflow-hidden p-0 flex flex-col")}>
             {/* HEADER */}
             <div className="shrink-0 border-b border-slate-200 px-5 py-4">
               <div className="flex items-start gap-3">
@@ -444,11 +448,13 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
             </div>
 
             {/* BODY */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+            <div className="flex-1 overflow-y-auto px-5 py-5">
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px] gap-4">
+              <div className="space-y-6">
               
               <FormSection title="Type de plan">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button type="button" onClick={() => setNewPlanData({ ...newPlanData, visibility: "public" })} className={cn("p-3 rounded-lg border-2 text-left transition-all", newPlanData.visibility === "public" ? "border-[#0B676E] bg-[#0B676E]/5" : "border-slate-200 hover:border-[#0B676E]/30")}>
+                  <button type="button" onClick={() => setNewPlanData({ ...newPlanData, visibility: "public" })} className={cn("p-2.5 rounded-lg border text-left transition-all", newPlanData.visibility === "public" ? "border-[#0B676E] bg-[#0B676E]/5" : "border-slate-200 hover:border-[#0B676E]/30")}>
                     <div className="flex items-center gap-2 mb-0.5">
                       <div className={cn("w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center", newPlanData.visibility === "public" ? "border-[#0B676E]" : "border-slate-300")}>
                         {newPlanData.visibility === "public" && <div className="w-1.5 h-1.5 rounded-full bg-[#0B676E]" />}
@@ -457,7 +463,7 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
                     </div>
                     <p className="text-[10.5px] text-slate-500 ml-5.5">Visible sur le site</p>
                   </button>
-                  <button type="button" onClick={() => setNewPlanData({ ...newPlanData, visibility: "private" })} className={cn("p-3 rounded-lg border-2 text-left transition-all", newPlanData.visibility === "private" ? "border-violet-500 bg-violet-50" : "border-slate-200 hover:border-violet-300")}>
+                  <button type="button" onClick={() => setNewPlanData({ ...newPlanData, visibility: "private" })} className={cn("p-2.5 rounded-lg border text-left transition-all", newPlanData.visibility === "private" ? "border-violet-500 bg-violet-50" : "border-slate-200 hover:border-violet-300")}>
                     <div className="flex items-center gap-2 mb-0.5">
                       <div className={cn("w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center", newPlanData.visibility === "private" ? "border-violet-500" : "border-slate-300")}>
                         {newPlanData.visibility === "private" && <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />}
@@ -481,21 +487,21 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
 
               <FormSection title="Informations" className="pt-4 border-t border-slate-100">
                 <Field label="Nom du plan" required>
-                  <Input className={ui.input} placeholder="Ex : Premium Family" value={newPlanData.name || ""} onChange={(e) => setNewPlanData({ ...newPlanData, name: e.target.value })} />
+                  <Input className={ui.input} placeholder="Ex : Premium Family" maxLength={80} value={newPlanData.name || ""} onChange={(e) => setNewPlanData({ ...newPlanData, name: e.target.value })} />
                 </Field>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <Field label="Prix / mois (Ar)" required>
-                    <Input type="number" className={ui.input} placeholder="25000" value={newPlanData.pricePerMonth || ""} onChange={(e) => setNewPlanData({ ...newPlanData, pricePerMonth: Number(e.target.value) })} />
+                    <Input type="number" min={1} step={1} inputMode="numeric" className={ui.input} placeholder="25000" value={newPlanData.pricePerMonth ?? ""} onChange={(e) => setNewPlanData({ ...newPlanData, pricePerMonth: e.target.value === "" ? "" : Number(e.target.value) })} />
                   </Field>
                   <Field label="Articles" required>
-                    <Input type="number" className={ui.input} placeholder="20" value={newPlanData.itemsIncluded || ""} onChange={(e) => setNewPlanData({ ...newPlanData, itemsIncluded: parseInt(e.target.value) })} />
+                    <Input type="number" min={1} step={1} inputMode="numeric" className={ui.input} placeholder="20" value={newPlanData.itemsIncluded ?? ""} onChange={(e) => setNewPlanData({ ...newPlanData, itemsIncluded: e.target.value === "" ? "" : Number(e.target.value) })} />
                   </Field>
                   <Field label="Ramassages / sem." required>
-                    <Input type="number" className={ui.input} placeholder="2" value={newPlanData.pickupsPerWeek || ""} onChange={(e) => setNewPlanData({ ...newPlanData, pickupsPerWeek: parseInt(e.target.value) })} />
+                    <Input type="number" min={0} step={1} inputMode="numeric" className={ui.input} placeholder="2" value={newPlanData.pickupsPerWeek ?? ""} onChange={(e) => setNewPlanData({ ...newPlanData, pickupsPerWeek: e.target.value === "" ? "" : Number(e.target.value) })} />
                   </Field>
                 </div>
                 <Field label="Délai de livraison (heures)" required>
-                  <Input type="number" className={ui.input} placeholder="48" value={newPlanData.deliveryTimeHours || ""} onChange={(e) => setNewPlanData({ ...newPlanData, deliveryTimeHours: parseInt(e.target.value) })} />
+                  <Input type="number" min={1} step={1} inputMode="numeric" className={ui.input} placeholder="48" value={newPlanData.deliveryTimeHours ?? ""} onChange={(e) => setNewPlanData({ ...newPlanData, deliveryTimeHours: e.target.value === "" ? "" : Number(e.target.value) })} />
                 </Field>
               </FormSection>
 
@@ -525,6 +531,36 @@ export function PlansTab({ subscriptionPlans, subscriptions, toast, queryClient 
               <div className="flex items-center space-x-2 p-3 rounded-lg border border-slate-200 bg-slate-50 mt-4">
                 <Checkbox id="isActive" checked={newPlanData.isActive !== false} onCheckedChange={(checked) => setNewPlanData({ ...newPlanData, isActive: checked === true })} />
                 <Label htmlFor="isActive" className="text-[12px] cursor-pointer font-medium text-slate-800">Plan actif (disponible à la souscription)</Label>
+              </div>
+              </div>
+
+              <aside className="h-fit rounded-xl border border-slate-200 bg-slate-50 p-4 lg:sticky lg:top-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Aperçu en direct</p>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-semibold text-slate-900">{newPlanData.name?.trim() || "Nom du plan"}</p>
+                  <Pill tone={newPlanData.visibility === "private" ? "purple" : "brand"}>{newPlanData.visibility === "private" ? "Privé" : "Public"}</Pill>
+                </div>
+                <div className="mt-4 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+                  <p className="text-2xl font-bold tabular-nums text-slate-900">{formatPrice(newPlanData.pricePerMonth || 0)} <span className="text-xs font-medium text-slate-500">Ar / mois</span></p>
+                  <div className="mt-3 grid grid-cols-3 divide-x divide-slate-200 text-center">
+                    <div className="px-1"><p className="text-sm font-semibold text-slate-800">{newPlanData.itemsIncluded || 0}</p><p className="text-[9px] uppercase text-slate-400">Articles</p></div>
+                    <div className="px-1"><p className="text-sm font-semibold text-slate-800">{newPlanData.pickupsPerWeek || 0}×</p><p className="text-[9px] uppercase text-slate-400">Ramassages</p></div>
+                    <div className="px-1"><p className="text-sm font-semibold text-slate-800">{newPlanData.deliveryTimeHours || 0}h</p><p className="text-[9px] uppercase text-slate-400">Délai</p></div>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Options incluses</p>
+                  {Array.isArray(newPlanData.features) && newPlanData.features.length > 0 ? (
+                    <ul className="mt-2 space-y-2">
+                      {newPlanData.features.slice(0, 5).map((feature: string) => <li key={feature} className="flex items-start gap-2 text-xs text-slate-600"><span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#0B676E]" />{feature}</li>)}
+                      {newPlanData.features.length > 5 && <li className="text-[11px] font-medium text-[#0B676E]">+{newPlanData.features.length - 5} autres options</li>}
+                    </ul>
+                  ) : <p className="mt-2 text-xs text-slate-400">Aucune option sélectionnée</p>}
+                </div>
+                <div className="mt-4 border-t border-slate-200 pt-3">
+                  <Pill tone={newPlanData.isActive === false ? "slate" : "green"}>{newPlanData.isActive === false ? "Inactif" : "Actif à la publication"}</Pill>
+                </div>
+              </aside>
               </div>
             </div>
 

@@ -126,30 +126,29 @@ export default function analyticsRoutes(app: Express) {
       // 1.1 VUE FINANCIÈRE - CORRIGÉE
       // ==========================================================
       
-      // 🔥 CHIFFRE D'AFFAIRES MENSUEL - SANS FILTRE DE DATE POUR TEST
+      // Chiffre d'affaires des factures payées pendant le mois en cours.
       const monthlyRevenueResult = await db.select({
         sum: sql<number>`COALESCE(SUM(${invoices.amount}), 0)`
       }).from(invoices)
       .where(and(
-        eq(invoices.status, "paid")
-        // ⚠️ Commenté pour debug - décommente après vérification
-        // gte(invoices.createdAt, currentMonthStart),
-        // lte(invoices.createdAt, currentMonthEnd)
+        eq(invoices.status, "paid"),
+        gte(invoices.createdAt, currentMonthStart),
+        lte(invoices.createdAt, currentMonthEnd)
       ));
       const monthlyRevenue = Number(monthlyRevenueResult[0]?.sum || 0);
-      console.log(`[EXECUTIVE] CA mensuel (toutes périodes): ${monthlyRevenue} Ar`);
+      console.log(`[EXECUTIVE] CA du mois en cours: ${monthlyRevenue} Ar`);
 
-      // CA du mois précédent (toutes périodes)
+      // Chiffre d'affaires des factures payées pendant le mois précédent.
       const prevMonthlyRevenueResult = await db.select({
         sum: sql<number>`COALESCE(SUM(${invoices.amount}), 0)`
       }).from(invoices)
       .where(and(
-        eq(invoices.status, "paid")
-        // gte(invoices.createdAt, previousMonthStart),
-        // lte(invoices.createdAt, previousMonthEnd)
+        eq(invoices.status, "paid"),
+        gte(invoices.createdAt, previousMonthStart),
+        lte(invoices.createdAt, previousMonthEnd)
       ));
       const prevMonthlyRevenue = Number(prevMonthlyRevenueResult[0]?.sum || 0);
-      console.log(`[EXECUTIVE] CA mois précédent: ${prevMonthlyRevenue} Ar`);
+      console.log(`[EXECUTIVE] CA du mois précédent: ${prevMonthlyRevenue} Ar`);
       
       const revenueGrowth = calculateGrowth(monthlyRevenue, prevMonthlyRevenue);
       console.log(`[EXECUTIVE] Croissance CA: ${revenueGrowth}%`);

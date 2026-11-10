@@ -477,7 +477,7 @@ export function ExpensesTab() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"expenses" | "cash" | "budgets" | "analytics">("expenses");
   const [expenseFilters, setExpenseFilters] = useState({
-    timePeriod: "month", category: "all", search: "",
+    timePeriod: "all", category: "all", search: "",
     sortBy: "expense_date", sortOrder: "desc", page: 1,
     startDate: "", endDate: "", limit: 10,
   });
@@ -496,7 +496,7 @@ export function ExpensesTab() {
   const [transactionDate, setTransactionDate] = useState<Date>(new Date());
 
   /* ---- Queries ---- */
-  const { data: expensesData, isLoading: expensesLoading } = useQuery({
+  const { data: expensesData, isLoading: expensesLoading, isError: expensesError, error: expensesQueryError, refetch: refetchExpenses } = useQuery({
     queryKey: ["expenses", expenseFilters.timePeriod, expenseFilters.category, expenseFilters.search, expenseFilters.sortBy, expenseFilters.sortOrder, expenseFilters.page, expenseFilters.startDate, expenseFilters.endDate, expenseFilters.limit],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -519,12 +519,10 @@ export function ExpensesTab() {
     try {
       const raw: any[] = expensesData?.data ?? [];
       if (!Array.isArray(raw)) return [];
-      return raw
-        .filter((e) => e?.date || e?.expenseDate)
-        .map((e) => {
-          const d: string = e.date ?? e.expenseDate;
-          return { ...e, date: d, expenseDate: e.expenseDate ?? d };
-        });
+      return raw.map((e) => {
+        const d: string = e?.date ?? e?.expenseDate ?? e?.expense_date ?? e?.createdAt ?? "";
+        return { ...e, date: d, expenseDate: e?.expenseDate ?? e?.expense_date ?? d };
+      });
     } catch {
       return [];
     }
@@ -648,12 +646,38 @@ export function ExpensesTab() {
       const endpoint = data.type === "income" ? "/api/cash/income" : "/api/cash/expense";
       return (await apiRequest("POST", endpoint, data)).json();
     },
-    onSuccess: () => {
-      invalidateExpenseRelated();
+    onSuccess: async (result, variables) => {
+      // Show the newly entered expense on page 1 without filters that hide it.
+      if (variables.type === "expense") {
+        setExpenseFilters((filters) => ({
+          ...filters,
+          timePeriod: "all",
+          category: "all",
+          search: "",
+          page: 1,
+          startDate: "",
+          endDate: "",
+        }));
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["expenses"] }),
+        queryClient.invalidateQueries({ queryKey: ["expenseStats"] }),
+        queryClient.invalidateQueries({ queryKey: ["cashBalance"] }),
+        queryClient.invalidateQueries({ queryKey: ["cashTransactions"] }),
+      ]);
+      refetchMonthlyStats();
       setIsCashDialogOpen(false);
       cashForm.reset();
       setTransactionDate(new Date());
-      toast({ title: "Transaction enregistrée" });
+      if (variables.type === "expense" && result?.cashTransactionSaved === false) {
+        toast({
+          title: "Dépense enregistrée",
+          description: "La dépense est dans la liste, mais son écriture dans l’historique de caisse a échoué.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: variables.type === "expense" ? "Dépense enregistrée" : "Transaction enregistrée" });
+      }
     },
     onError: (error: Error) => toast({ title: "Erreur", description: error.message, variant: "destructive" }),
   });
@@ -702,7 +726,7 @@ export function ExpensesTab() {
   }, [budgetForm]);
 
   const resetFilters = useCallback(() => {
-    setExpenseFilters({ timePeriod: "month", category: "all", search: "", sortBy: "expense_date", sortOrder: "desc", page: 1, startDate: "", endDate: "", limit: 10 });
+    setExpenseFilters({ timePeriod: "all", category: "all", search: "", sortBy: "expense_date", sortOrder: "desc", page: 1, startDate: "", endDate: "", limit: 10 });
     setCustomDateRange({ from: null, to: null });
   }, []);
 
@@ -1034,6 +1058,12 @@ export function ExpensesTab() {
                   <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
                 <p className={ui.textSm}>Chargement des dépenses…</p>
+              </div>
+            ) : expensesError ? (
+              <div className="text-center py-12">
+                <p className="text-sm font-medium text-red-700 mb-2">Impossible de charger les dépenses.</p>
+                <p className={cn(ui.textSm, "mb-4")}>{expensesQueryError instanceof Error ? expensesQueryError.message : "Erreur inconnue"}</p>
+                <Button onClick={() => refetchExpenses()} size="sm" variant="outline">Réessayer</Button>
               </div>
             ) : expenses.length === 0 ? (
               <div className="text-center py-16">

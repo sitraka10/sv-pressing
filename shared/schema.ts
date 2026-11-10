@@ -481,7 +481,7 @@ export const expenses = pgTable("expenses", {
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("MGA"),
-  category: expenseCategoryEnum("category").notNull(),
+  category: text("category").notNull(),
   expenseDate: timestamp("expense_date").notNull(),
   accountingPeriod: text("accounting_period"),
   addedBy: integer("added_by").notNull().references(() => users.id),
@@ -545,7 +545,7 @@ export const cashBalanceHistory = pgTable("cash_balance_history", {
 
 export const categoryBudgets = pgTable("category_budgets", {
   id: serial("id").primaryKey(),
-  category: expenseCategoryEnum("category").notNull(),
+  category: text("category").notNull(),
   month: integer("month").notNull(),
   year: integer("year").notNull(),
   budgetAmount: decimal("budget_amount", { precision: 10, scale: 2 }).notNull(),
@@ -563,7 +563,7 @@ export const categoryBudgets = pgTable("category_budgets", {
 export const budgetAlerts = pgTable("budget_alerts", {
   id: serial("id").primaryKey(),
   budgetId: integer("budget_id").references(() => categoryBudgets.id),
-  category: expenseCategoryEnum("category").notNull(),
+  category: text("category").notNull(),
   month: integer("month").notNull(),
   year: integer("year").notNull(),
   budgetAmount: decimal("budget_amount", { precision: 10, scale: 2 }).notNull(),
@@ -583,7 +583,7 @@ export const recurringExpenses = pgTable("recurring_expenses", {
   id: serial("id").primaryKey(),
   description: text("description").notNull(),
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  category: expenseCategoryEnum("category").notNull(),
+  category: text("category").notNull(),
   frequency: recurringFrequencyEnum("frequency").notNull(),
   dayOfMonth: integer("day_of_month"),
   dayOfWeek: integer("day_of_week"),
